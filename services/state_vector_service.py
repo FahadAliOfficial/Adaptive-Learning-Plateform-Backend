@@ -20,18 +20,20 @@ class StateVectorGenerator:
     
     State Vector Structure (DYNAMIC based on curriculum):
     Default with 5 languages & 8 mappings = 35 dimensions:
-    [0-4]   Language One-Hot Encoding (num_languages)
-    [5-12]  Mastery Scores with Decay (num_mappings)
-    [13-20] Fluency Scores (num_mappings)
-    [21-28] Confidence Scores (num_mappings)
-    [29]    Last Session Accuracy
-    [30]    Last Session Difficulty
-    [31]    Average Fluency Ratio
-    [32]    Mastery Stability (Std Dev of recent scores)
-    [33]    Days Since Last Practice
-    [34]    Soft Gate Readiness (0-1 scale)
+    [lang_offset : lang_offset+5]         Language One-Hot Encoding
+    [mastery_offset : mastery_offset+8]   Mastery Scores with Decay
+    [fluency_offset : fluency_offset+8]   Fluency Scores
+    [confidence_offset : confidence_offset+8] Confidence Scores
+    [behavioral_offset : behavioral_offset+6] Behavioral Metrics:
+        [0] Last Session Accuracy
+        [1] Last Session Difficulty
+        [2] Average Fluency Ratio
+        [3] Mastery Stability (Std Dev)
+        [4] Days Since Last Practice
+        [5] Soft Gate Readiness
     
     Formula: vector_size = num_languages + (num_mappings × 3) + 6
+    All indices calculated dynamically - NO hardcoded positions!
     
     Additional metadata includes:
     - Prerequisites satisfaction status
@@ -55,6 +57,13 @@ class StateVectorGenerator:
         # Vector dimension calculation (DYNAMIC - adapts to curriculum changes!)
         # Structure: language_onehot + (mappings × 3 scores) + 6 behavioral metrics
         self.vector_size = len(self.languages_order) + (len(self.mappings_order) * 3) + 6
+        
+        # Calculate index offsets dynamically (prevents corruption on curriculum changes!)
+        self.lang_offset = 0
+        self.mastery_offset = len(self.languages_order)
+        self.fluency_offset = len(self.languages_order) + len(self.mappings_order)
+        self.confidence_offset = len(self.languages_order) + (len(self.mappings_order) * 2)
+        self.behavioral_offset = len(self.languages_order) + (len(self.mappings_order) * 3)
     
     def generate_vector(self, request: StateVectorRequest) -> StateVectorResponse:
         """
@@ -67,33 +76,33 @@ class StateVectorGenerator:
         # Initialize vector (dynamic dimensions based on curriculum)
         vector = np.zeros(self.vector_size, dtype=np.float32)
         
-        # 1. Language One-Hot Encoding [0-4]
+        # 1. Language One-Hot Encoding [lang_offset : lang_offset + num_languages]
         lang_idx = self.languages_order.index(language_id)
-        vector[lang_idx] = 1.0
+        vector[self.lang_offset + lang_idx] = 1.0
         
-        # 2. Decayed Mastery Scores [5-12]
+        # 2. Decayed Mastery Scores [mastery_offset : mastery_offset + num_mappings]
         mastery_map = self._get_decayed_mastery(user_id, language_id)
         for i, mapping_id in enumerate(self.mappings_order):
-            vector[5 + i] = mastery_map.get(mapping_id, 0.0)
+            vector[self.mastery_offset + i] = mastery_map.get(mapping_id, 0.0)
         
-        # 3. Fluency Scores [13-20]
+        # 3. Fluency Scores [fluency_offset : fluency_offset + num_mappings]
         fluency_map = self._get_fluency_scores(user_id, language_id)
         for i, mapping_id in enumerate(self.mappings_order):
-            vector[13 + i] = fluency_map.get(mapping_id, 1.0)  # Default to normal speed
+            vector[self.fluency_offset + i] = fluency_map.get(mapping_id, 1.0)  # Default to normal speed
         
-        # 4. Confidence Scores [21-28] - NEW!
+        # 4. Confidence Scores [confidence_offset : confidence_offset + num_mappings]
         confidence_map = self._get_confidence_scores(user_id, language_id)
         for i, mapping_id in enumerate(self.mappings_order):
-            vector[21 + i] = confidence_map.get(mapping_id, 0.0)
+            vector[self.confidence_offset + i] = confidence_map.get(mapping_id, 0.0)
         
-        # 5. Behavioral Metrics [29-34]
+        # 5. Behavioral Metrics [behavioral_offset : behavioral_offset + 6]
         metrics = self._get_behavioral_metrics(user_id, language_id)
-        vector[29] = metrics['last_accuracy']
-        vector[30] = metrics['last_difficulty']
-        vector[31] = metrics['avg_fluency']
-        vector[32] = metrics['stability']
-        vector[33] = metrics['days_inactive']
-        vector[34] = metrics['gate_readiness']
+        vector[self.behavioral_offset + 0] = metrics['last_accuracy']
+        vector[self.behavioral_offset + 1] = metrics['last_difficulty']
+        vector[self.behavioral_offset + 2] = metrics['avg_fluency']
+        vector[self.behavioral_offset + 3] = metrics['stability']
+        vector[self.behavioral_offset + 4] = metrics['days_inactive']
+        vector[self.behavioral_offset + 5] = metrics['gate_readiness']
         
         # 6. Generate rich metadata (prerequisites, transfer potential, errors)
         metadata = self._generate_metadata(vector, user_id, language_id, mastery_map)
@@ -310,10 +319,10 @@ class StateVectorGenerator:
             "weakest_topic": {"id": weakest[0], "mastery": round(weakest[1], 3)},
             "needs_review": needs_review,
             "overall_mastery_avg": round(np.mean([s for _, s in topic_strengths if s > 0]), 3) if topic_strengths else 0.0,
-            "last_session_accuracy": round(vector[29], 3),
-            "stability_score": round(vector[32], 3),
-            "days_since_practice": int(vector[33]),
-            "gate_readiness": round(vector[34], 3),
+            "last_session_accuracy": round(vector[self.behavioral_offset + 0], 3),
+            "stability_score": round(vector[self.behavioral_offset + 3], 3),
+            "days_since_practice": int(vector[self.behavioral_offset + 4]),
+            "gate_readiness": round(vector[self.behavioral_offset + 5], 3),
             "prerequisites_status": prereq_status,  # NEW
             "transfer_potential": transfer_potential,  # NEW
             "recent_error_patterns": error_patterns,  # NEW
