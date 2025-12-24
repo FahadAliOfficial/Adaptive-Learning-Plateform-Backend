@@ -331,13 +331,13 @@ class GradingService:
         query = text("""
             SELECT mapping_id, mastery_score 
             FROM student_state 
-            WHERE user_id=:u AND language_id=:l AND mapping_id = ANY(:prereqs)
+            WHERE user_id=:u AND language_id=:l AND mapping_id IN :prereqs
         """)
         
         results = self.db.execute(query, {
             "u": user_id,
             "l": language_id,
-            "prereqs": prereq_mappings
+            "prereqs": tuple(prereq_mappings)  # Use tuple for IN clause (SQL injection safe)
         }).fetchall()
         
         mastery_map = {row[0]: row[1] for row in results}
@@ -383,6 +383,8 @@ class GradingService:
     
     def _save_exam_details(self, session_id: uuid.UUID, results: List[QuestionResult]):
         """Save detailed question results for review UI."""
+        import json
+        
         snapshot = {
             "questions": [
                 {
@@ -404,7 +406,7 @@ class GradingService:
         
         self.db.execute(insert, {
             "sid": str(session_id),
-            "snap": str(snapshot).replace("'", '"')  # Convert to valid JSON
+            "snap": json.dumps(snapshot)  # Proper JSON serialization (handles quotes, escaping, etc.)
         })
     
     def _generate_recommendations(

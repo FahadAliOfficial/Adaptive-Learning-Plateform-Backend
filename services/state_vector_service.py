@@ -73,6 +73,13 @@ class StateVectorGenerator:
         user_id = request.user_id
         language_id = request.language_id
         
+        # Validate language_id exists in curriculum
+        if language_id not in self.config.valid_languages:
+            raise ValueError(
+                f"Invalid language_id: {language_id}. "
+                f"Valid languages: {sorted(self.config.valid_languages)}"
+            )
+        
         # Initialize vector (dynamic dimensions based on curriculum)
         vector = np.zeros(self.vector_size, dtype=np.float32)
         
@@ -259,13 +266,13 @@ class StateVectorGenerator:
             query = text("""
                 SELECT AVG(mastery_score) 
                 FROM student_state 
-                WHERE user_id=:u AND language_id=:l AND mapping_id = ANY(:prereqs)
+                WHERE user_id=:u AND language_id=:l AND mapping_id IN :prereqs
             """)
             
             avg_mastery = self.db.execute(query, {
                 "u": user_id,
                 "l": language_id,
-                "prereqs": prereqs
+                "prereqs": tuple(prereqs)  # Use tuple for IN clause (SQL injection safe)
             }).scalar() or 0.0
             
             # Calculate readiness as ratio

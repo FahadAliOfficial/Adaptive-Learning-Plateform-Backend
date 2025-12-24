@@ -17,9 +17,23 @@ from services.schemas import (
 from services.grading_service import GradingService
 from services.state_vector_service import StateVectorGenerator
 
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
 # Database setup
-DATABASE_URL = "postgresql://user:password@localhost:5432/fyp_db"
-engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL environment variable not set. Create a .env file with DATABASE_URL=postgresql://user:pass@host:5432/db")
+
+engine = create_engine(
+    DATABASE_URL, 
+    pool_pre_ping=True,
+    pool_size=20,           # Connection pooling for performance
+    max_overflow=40
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 app = FastAPI(title="FYP Phase 1 API", version="1.0")
