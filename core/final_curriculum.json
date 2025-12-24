@@ -49,7 +49,7 @@
         "name": "Functions",
         "global_difficulty": 0.25,
         "prerequisites": ["PY_LOOP_01"],
-        "sub_topics": ["Def Statement", "Arguments", "Positional and Keyword Args", "Return Statements", "Returns", "Lambda Expressions", "Global vs Local Scope", "Scope"]
+        "sub_topics": ["Def Statement", "Arguments", "Positional and Keyword Args", "Return Statements", "Lambda Expressions", "Global vs Local Scope"]
       },
       {
         "major_topic_id": "PY_COLL_01",
@@ -57,7 +57,7 @@
         "name": "Data Structures",
         "global_difficulty": 0.30,
         "prerequisites": ["PY_FUNC_01"],
-        "sub_topics": ["Lists", "Mutable Lists", "Tuples", "Immutable Tuples", "Dictionaries", "Key-Value Dictionaries", "Set Operations", "Slicing"]
+        "sub_topics": ["Lists (Mutable)", "Tuples (Immutable)", "Dictionaries (Key-Value)", "Set Operations", "Slicing"]
       },
       {
         "major_topic_id": "PY_OOP_01",
@@ -65,7 +65,7 @@
         "name": "OOP Basics",
         "global_difficulty": 0.45,
         "prerequisites": ["PY_COLL_01"],
-        "sub_topics": ["Class Declaration", "Classes", "The self Reference", "Self", "Constructor (__init__)", "Inheritance", "Instance vs Static Methods", "Methods"]
+        "sub_topics": ["Class Declaration", "The self Reference", "Constructor (__init__)", "Inheritance", "Instance vs Static Methods"]
       }
     ]
   },
@@ -79,7 +79,7 @@
         "name": "JS Engine Basics",
         "global_difficulty": 0.08,
         "prerequisites": [],
-        "sub_topics": ["Console Log", "Console Logging", "Execution Order", "Expressions", "Statement vs Expression"]
+        "sub_topics": ["Console Logging", "Execution Order", "Expressions", "Statement vs Expression"]
       },
       {
         "major_topic_id": "JS_SYN_PREC",
@@ -87,7 +87,7 @@
         "name": "ES6 Syntax Precision",
         "global_difficulty": 0.10,
         "prerequisites": ["JS_SYN_LOGIC"],
-        "sub_topics": ["Semicolons", "Semi-colon Usage", "Braces", "Strict Equality", "Strict Equality (===)", "Case Sensitivity"]
+        "sub_topics": ["Semicolon Usage", "Braces", "Strict Equality (===)", "Case Sensitivity"]
       },
       {
         "major_topic_id": "JS_VAR_01",
@@ -103,7 +103,7 @@
         "name": "Conditionals",
         "global_difficulty": 0.18,
         "prerequisites": ["JS_VAR_01"],
-        "sub_topics": ["If-Else Blocks", "Switch", "Switch-Case", "Ternary", "Ternary Operator", "Short-circuit", "Short-circuit Evaluation"]
+        "sub_topics": ["If-Else Blocks", "Switch-Case", "Ternary Operator", "Short-circuit Evaluation"]
       },
       {
         "major_topic_id": "JS_LOOP_01",
@@ -111,7 +111,7 @@
         "name": "Iteration",
         "global_difficulty": 0.22,
         "prerequisites": ["JS_COND_01"],
-        "sub_topics": ["For Loops", "For-of/in", "For-of vs For-in", "While", "While and Do-While", "Do-While", "Labels", "Break and Label"]
+        "sub_topics": ["For Loops", "For-of vs For-in", "While and Do-While", "Break and Labels"]
       },
       {
         "major_topic_id": "JS_FUNC_01",
@@ -119,7 +119,7 @@
         "name": "Functions",
         "global_difficulty": 0.35,
         "prerequisites": ["JS_LOOP_01"],
-        "sub_topics": ["Arrows", "Arrow Functions", "Callback Mechanics", "Closures", "Scope and Closures", "Rest/Spread Params", "Hoisting"]
+        "sub_topics": ["Arrow Functions", "Callback Mechanics", "Closures and Scope", "Rest/Spread Params", "Hoisting"]
       },
       {
         "major_topic_id": "JS_COLL_01",
@@ -127,7 +127,7 @@
         "name": "Data Structures",
         "global_difficulty": 0.30,
         "prerequisites": ["JS_FUNC_01"],
-        "sub_topics": ["Map/Filter", "Array Methods (Map/Filter)", "Destructuring", "Objects", "Object Literals", "Map and Set Objects"]
+        "sub_topics": ["Array Methods (Map/Filter/Reduce)", "Destructuring", "Object Literals", "Map and Set Objects"]
       },
       {
         "major_topic_id": "JS_OOP_01",
@@ -135,7 +135,7 @@
         "name": "OOP Basics",
         "global_difficulty": 0.50,
         "prerequisites": ["JS_COLL_01"],
-        "sub_topics": ["Class Keyword", "Constructor Function", "Prototypes", "This Keyword Binding", "This Binding", "Super Calls"]
+        "sub_topics": ["Class Keyword", "Constructor Function", "Prototypes", "This Keyword Binding", "Super Calls"]
       }
     ]
   },
@@ -149,7 +149,7 @@
         "name": "JVM Concepts",
         "global_difficulty": 0.12,
         "prerequisites": [],
-        "sub_topics": ["Class Wrappers", "Class Wrapper", "Main Method", "Main Method Boilerplate"]
+        "sub_topics": ["Class Wrappers", "Main Method Boilerplate"]
       },
       {
         "major_topic_id": "JV_SYN_PREC",
@@ -157,7 +157,7 @@
         "name": "Java Precision",
         "global_difficulty": 0.15,
         "prerequisites": ["JV_SYN_LOGIC"],
-        "sub_topics": ["Terminators", "Statement Terminators", "Block Scoping", "Strong Typing Rules"]
+        "sub_topics": ["Statement Terminators", "Block Scoping", "Strong Typing Rules"]
       },
       {
         "major_topic_id": "JV_VAR_01",
@@ -165,7 +165,7 @@
         "name": "Static Typing",
         "global_difficulty": 0.20,
         "prerequisites": ["JV_SYN_PREC"],
-        "sub_topics": ["Primitives", "Primitive Data Types", "Variable Declaration", "Final", "Final Keyword", "Casting", "Type Casting", "Reference Types"]
+        "sub_topics": ["Primitive Data Types", "Variable Declaration", "Final Keyword", "Type Casting", "Reference Types"]
       },
       {
         "major_topic_id": "JV_COND_01",
@@ -173,7 +173,7 @@
         "name": "Conditionals",
         "global_difficulty": 0.22,
         "prerequisites": ["JV_VAR_01"],
-        "sub_topics": ["If-Else-If", "Switch Yield", "Switch Expressions", "Relational Eval", "Relational Evaluation", "Logical Operators"]
+        "sub_topics": ["If-Else-If", "Switch Expressions", "Relational Evaluation", "Logical Operators"]
       },
       {
         "major_topic_id": "JV_LOOP_01",
@@ -181,7 +181,7 @@
         "name": "Iteration",
         "global_difficulty": 0.25,
         "prerequisites": ["JV_COND_01"],
-        "sub_topics": ["Standard For Loop", "Enhanced For", "Enhanced For (Each)", "While/Do-While", "Loop Control"]
+        "sub_topics": ["Standard For Loop", "Enhanced For (Each)", "While/Do-While", "Loop Control"]
       },
       {
         "major_topic_id": "JV_FUNC_01",
@@ -189,7 +189,7 @@
         "name": "Methods",
         "global_difficulty": 0.30,
         "prerequisites": ["JV_LOOP_01"],
-        "sub_topics": ["Signatures", "Method Signatures", "Return Types", "Parameter Passing", "Overloading", "Method Overloading", "Statics", "Static Methods"]
+        "sub_topics": ["Method Signatures", "Return Types", "Parameter Passing", "Method Overloading", "Static Methods"]
       },
       {
         "major_topic_id": "JV_COLL_01",
@@ -197,7 +197,7 @@
         "name": "Collections",
         "global_difficulty": 0.40,
         "prerequisites": ["JV_FUNC_01"],
-        "sub_topics": ["Fixed-size Arrays", "ArrayList", "ArrayList Class", "Generics Basics", "Maps", "HashMap/HashSet"]
+        "sub_topics": ["Fixed-size Arrays", "ArrayList Class", "Generics Basics", "HashMap/HashSet"]
       },
       {
         "major_topic_id": "JV_OOP_01",
@@ -205,7 +205,7 @@
         "name": "Strict OOP",
         "global_difficulty": 0.55,
         "prerequisites": ["JV_COLL_01"],
-        "sub_topics": ["Encapsulation", "Encapsulation (Getters/Setters)", "Inheritance (Extends)", "Interfaces", "Polymorphism", "Abstract Classes"]
+        "sub_topics": ["Encapsulation (Getters/Setters)", "Inheritance (Extends)", "Interfaces", "Polymorphism", "Abstract Classes"]
       }
     ]
   },
@@ -219,7 +219,7 @@
         "name": "Compilation Flow",
         "global_difficulty": 0.18,
         "prerequisites": [],
-        "sub_topics": ["Preprocessor", "Include Preprocessor", "Main Signature", "Main Function Signature"]
+        "sub_topics": ["Include Preprocessor", "Main Function Signature"]
       },
       {
         "major_topic_id": "CPP_SYN_PREC",
@@ -227,7 +227,7 @@
         "name": "CPP Precision",
         "global_difficulty": 0.22,
         "prerequisites": ["CPP_SYN_LOGIC"],
-        "sub_topics": ["Namespaces", "Namespace Std", "Declarations", "Declaration vs Definition"]
+        "sub_topics": ["Namespace Std", "Declaration vs Definition"]
       },
       {
         "major_topic_id": "CPP_VAR_01",
@@ -235,7 +235,7 @@
         "name": "Memory & Types",
         "global_difficulty": 0.35,
         "prerequisites": ["CPP_SYN_PREC"],
-        "sub_topics": ["Static Typing", "Pointers", "Pointers and Addresses", "References", "References (&)", "Const", "Const Qualifiers", "Explicit Casting"]
+        "sub_topics": ["Static Typing", "Pointers and Addresses", "References (&)", "Const Qualifiers", "Explicit Casting"]
       },
       {
         "major_topic_id": "CPP_COND_01",
@@ -243,7 +243,7 @@
         "name": "Conditionals",
         "global_difficulty": 0.32,
         "prerequisites": ["CPP_VAR_01"],
-        "sub_topics": ["If-Else Blocks", "Truthiness", "Truthiness (Non-zero)", "Switch", "Switch Statement", "Boolean Logic"]
+        "sub_topics": ["If-Else Blocks", "Truthiness (Non-zero)", "Switch Statement", "Boolean Logic"]
       },
       {
         "major_topic_id": "CPP_LOOP_01",
@@ -251,7 +251,7 @@
         "name": "Iteration",
         "global_difficulty": 0.35,
         "prerequisites": ["CPP_COND_01"],
-        "sub_topics": ["Standard For", "While/Do-While", "Range-based", "Range-based Loops", "Labels", "Break/Continue Labels"]
+        "sub_topics": ["Standard For", "While/Do-While", "Range-based Loops", "Break/Continue Labels"]
       },
       {
         "major_topic_id": "CPP_FUNC_01",
@@ -259,7 +259,7 @@
         "name": "Functions",
         "global_difficulty": 0.42,
         "prerequisites": ["CPP_LOOP_01"],
-        "sub_topics": ["Prototypes", "Function Prototypes", "Pass-by-Ref", "Pass by Value/Pointer/Ref", "Inline", "Inline Functions", "Default Arguments", "Return Types"]
+        "sub_topics": ["Function Prototypes", "Pass by Value/Pointer/Ref", "Inline Functions", "Default Arguments", "Return Types"]
       },
       {
         "major_topic_id": "CPP_COLL_01",
@@ -267,7 +267,7 @@
         "name": "STL & Memory",
         "global_difficulty": 0.50,
         "prerequisites": ["CPP_FUNC_01"],
-        "sub_topics": ["C-style Arrays", "Vectors", "STL Vectors", "STL Maps/Sets", "New/Delete", "Memory Allocation (new/delete)", "Pointer Math", "Pointer Arithmetic"]
+        "sub_topics": ["C-style Arrays", "STL Vectors", "STL Maps/Sets", "Memory Allocation (new/delete)", "Pointer Arithmetic"]
       },
       {
         "major_topic_id": "CPP_OOP_01",
@@ -275,7 +275,7 @@
         "name": "Advanced OOP",
         "global_difficulty": 0.65,
         "prerequisites": ["CPP_COLL_01"],
-        "sub_topics": ["Access Specifiers", "Constructors/Destructors", "Virtual Funcs", "Virtual Functions", "Overloading", "Operator Overloading", "Destructors", "Multiple Inheritance"]
+        "sub_topics": ["Access Specifiers", "Constructors/Destructors", "Virtual Functions", "Operator Overloading", "Multiple Inheritance"]
       }
     ]
   },
@@ -289,7 +289,7 @@
         "name": "Package Flow",
         "global_difficulty": 0.08,
         "prerequisites": [],
-        "sub_topics": ["Imports", "Import Keyword", "Entry Points", "Func Main Entry", "Package Declaration"]
+        "sub_topics": ["Import Keyword", "Func Main Entry", "Package Declaration"]
       },
       {
         "major_topic_id": "GO_SYN_PREC",
@@ -297,7 +297,7 @@
         "name": "Go Format",
         "global_difficulty": 0.10,
         "prerequisites": ["GO_SYN_LOGIC"],
-        "sub_topics": ["Semicolon Insertion", "Go Fmt"]
+        "sub_topics": ["Automatic Semicolon Insertion", "Go Fmt"]
       },
       {
         "major_topic_id": "GO_VAR_01",
@@ -305,7 +305,7 @@
         "name": "Types & Pointers",
         "global_difficulty": 0.15,
         "prerequisites": ["GO_SYN_PREC"],
-        "sub_topics": ["Short Decl", "Var vs Short Declaration", "Zero Values", "Constants", "Pointers", "Basic Pointers", "Static Type Inference"]
+        "sub_topics": ["Var vs Short Declaration", "Zero Values", "Constants", "Basic Pointers", "Static Type Inference"]
       },
       {
         "major_topic_id": "GO_COND_01",
@@ -313,7 +313,7 @@
         "name": "Go Control",
         "global_difficulty": 0.18,
         "prerequisites": ["GO_VAR_01"],
-        "sub_topics": ["Init If", "If with Initializer", "Type Switches", "Switch (No Break Needed)", "Boolean Conditionals"]
+        "sub_topics": ["If with Initializer", "Type Switches", "Switch (No Break Needed)", "Boolean Conditionals"]
       },
       {
         "major_topic_id": "GO_LOOP_01",
@@ -321,7 +321,7 @@
         "name": "Iteration",
         "global_difficulty": 0.20,
         "prerequisites": ["GO_COND_01"],
-        "sub_topics": ["Unified For", "Unified For Loop", "Range", "Range Clause", "While-style For", "Infinite Loops"]
+        "sub_topics": ["Unified For Loop", "Range Clause", "While-style For", "Infinite Loops"]
       },
       {
         "major_topic_id": "GO_FUNC_01",
@@ -329,7 +329,7 @@
         "name": "Functions",
         "global_difficulty": 0.25,
         "prerequisites": ["GO_LOOP_01"],
-        "sub_topics": ["Multi-return", "Multiple Return Values", "Defer", "Defer Mechanism", "Named Returns", "Variadic Parameters", "Function Types"]
+        "sub_topics": ["Multiple Return Values", "Defer Mechanism", "Named Returns", "Variadic Parameters", "Function Types"]
       },
       {
         "major_topic_id": "GO_COLL_01",
@@ -337,7 +337,7 @@
         "name": "Structs & Slices",
         "global_difficulty": 0.35,
         "prerequisites": ["GO_FUNC_01"],
-        "sub_topics": ["Arrays vs Slices", "Append", "Make and Append", "Maps", "Maps (Key-Value)", "Structs", "Struct Declarations", "Slice Internal Header"]
+        "sub_topics": ["Arrays vs Slices", "Make and Append", "Maps (Key-Value)", "Struct Declarations", "Slice Internal Header"]
       },
       {
         "major_topic_id": "GO_OOP_01",
@@ -345,7 +345,7 @@
         "name": "Composition",
         "global_difficulty": 0.45,
         "prerequisites": ["GO_COLL_01"],
-        "sub_topics": ["Receivers", "Methods (Value/Pointer Receivers)", "Interfaces", "Embedding", "Struct Embedding (Composition)", "Type Assertions"]
+        "sub_topics": ["Methods (Value/Pointer Receivers)", "Interfaces", "Struct Embedding (Composition)", "Type Assertions"]
       }
     ]
   }
