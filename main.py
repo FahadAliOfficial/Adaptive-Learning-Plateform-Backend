@@ -19,6 +19,9 @@ from services.state_vector_service import StateVectorGenerator
 
 import os
 from dotenv import load_dotenv
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 # Load environment variables
 load_dotenv()
@@ -38,6 +41,11 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 app = FastAPI(title="FYP Phase 1 API", version="1.0")
 
+# Rate limiting setup
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 
 # Dependency: Database Session
 def get_db():
@@ -49,6 +57,7 @@ def get_db():
 
 
 @app.post("/api/exam/submit", response_model=MasteryUpdateResponse)
+@limiter.limit("10/minute")  # Max 10 exam submissions per minute
 async def submit_exam(
     payload: ExamSubmissionPayload,
     db: Session = Depends(get_db)

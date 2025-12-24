@@ -54,6 +54,9 @@ class GradingService:
         
         try:
             # 1. Calculate Session Statistics
+            if not payload.results:
+                raise ValueError("Exam must have at least one question")
+            
             corrects = [q for q in payload.results if q.is_correct]
             accuracy = len(corrects) / len(payload.results)
             avg_difficulty = sum(q.difficulty for q in payload.results) / len(payload.results)
@@ -170,7 +173,16 @@ class GradingService:
         
         # Apply soft gate penalty (reduce learning if prerequisites not met)
         if has_violations:
-            performance *= 0.6  # 40% penalty
+            # Use exponential penalty based on penalty_steepness from gate config
+            gate = self.config.get_soft_gate(mapping_id)
+            if gate and 'penalty_steepness' in gate:
+                # Exponential decay: e^(-steepness) gives smooth penalty curve
+                # steepness=2.5 → penalty_factor ≈ 0.082 (91.8% penalty)
+                # steepness=2.0 → penalty_factor ≈ 0.135 (86.5% penalty)
+                penalty_factor = math.exp(-gate['penalty_steepness'])
+            else:
+                penalty_factor = 0.6  # Fallback if no steepness defined
+            performance *= penalty_factor
         
         # EMA Update
         new_mastery = (old_mastery * self.retention_weight) + (performance * self.innovation_weight)

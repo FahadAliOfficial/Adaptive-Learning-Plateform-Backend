@@ -8,7 +8,7 @@ test_security_fixes.py
 .env.example
 COMPREHENSIVE_CODE_REVIEW.md
 EXECUTIVE_SUMMARY.md
-
+test_medium_priority_fixes.py
 
 # Environment variables
 .env

@@ -70,10 +70,10 @@ class StateVectorRequest(BaseModel):
     @validator('user_id')
     def validate_uuid(cls, v):
         try:
-            UUID(v)
+            # Normalize UUID format (ensures standard hyphenated lowercase)
+            return str(UUID(v))
         except ValueError:
-            raise ValueError('Invalid UUID format for user_id')
-        return v
+            raise ValueError(f'Invalid UUID format for user_id: {v}')
 
 
 class StateVectorResponse(BaseModel):
