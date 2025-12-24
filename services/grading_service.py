@@ -84,7 +84,8 @@ class GradingService:
                 accuracy=accuracy,
                 difficulty=avg_difficulty,
                 fluency=fluency_ratio,
-                has_violations=len(gate_violations) > 0
+                has_violations=len(gate_violations) > 0,
+                results=payload.results  # Pass results for error remediation
             )
             
             # 6. Apply Synergy Bonuses (only if accuracy >= 70%)
@@ -146,13 +147,14 @@ class GradingService:
         accuracy: float,
         difficulty: float,
         fluency: float,
-        has_violations: bool
+        has_violations: bool,
+        results: List[QuestionResult] = None
     ) -> float:
         """
         Update mastery score using Exponential Moving Average.
         
         Formula:
-        new_mastery = (old_mastery * 0.7) + (performance * 0.3)
+        new_mastery = (old_mastery * 0.7) + (performance * 0.3) + remediation_bonus
         where performance = accuracy * difficulty * penalty_factor
         """
         
@@ -186,6 +188,12 @@ class GradingService:
         
         # EMA Update
         new_mastery = (old_mastery * self.retention_weight) + (performance * self.innovation_weight)
+        
+        # Apply error remediation bonus (reward for fixing previous mistakes)
+        if results:
+            remediation_bonus = self._calculate_error_remediation_bonus(user_id, language_id, results)
+            new_mastery += remediation_bonus
+        
         new_mastery = min(new_mastery, 1.0)  # Cap at 1.0
         
         # Update fluency
@@ -252,6 +260,59 @@ class GradingService:
                 applied.append(f"{target_id} (+{bonus_value})")
         
         return applied
+    
+    def _calculate_error_remediation_bonus(self, user_id: str, language_id: str, results: List[QuestionResult]) -> float:
+        """
+        Calculate bonus for correcting previously made errors.
+        If user answers questions correctly that they got wrong before, apply remediation_boost.
+        """
+        # Get previous errors from last session
+        prev_errors_query = text("""
+            SELECT ed.questions_snapshot
+            FROM exam_details ed
+            JOIN exam_sessions es ON ed.session_id = es.id
+            WHERE es.user_id = :u AND es.language_id = :l
+            ORDER BY es.created_at DESC
+            LIMIT 1
+        """)
+        
+        prev_session = self.db.execute(prev_errors_query, {"u": user_id, "l": language_id}).fetchone()
+        
+        if not prev_session:
+            return 0.0  # No previous session to compare
+        
+        prev_snapshot = prev_session[0]
+        if not isinstance(prev_snapshot, dict) or 'questions' not in prev_snapshot:
+            return 0.0
+        
+        # Build set of error types from previous session
+        prev_errors = set()
+        for q in prev_snapshot.get('questions', []):
+            if not q.get('is_correct') and q.get('error_type'):
+                prev_errors.add(q['error_type'])
+        
+        if not prev_errors:
+            return 0.0  # No previous errors to remediate
+        
+        # Check current session for corrected errors
+        total_bonus = 0.0
+        for result in results:
+            if result.is_correct and result.error_type in prev_errors:
+                # User corrected a previous error!
+                bonus = self._get_remediation_boost(result.error_type)
+                total_bonus += bonus
+        
+        return min(total_bonus, 0.15)  # Cap total bonus at +0.15
+    
+    def _get_remediation_boost(self, error_type: str) -> float:
+        """
+        Get remediation boost value for specific error type from taxonomy.
+        """
+        for category in self.config.transition_map.get('error_pattern_taxonomy', []):
+            for pattern in category.get('patterns', []):
+                if pattern.get('error_code') == error_type:
+                    return pattern.get('remediation_boost', 0.0)
+        return 0.0  # No boost defined for this error
     
     def _apply_cross_language_transfer(
         self, 

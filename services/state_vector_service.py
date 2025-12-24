@@ -250,7 +250,7 @@ class StateVectorGenerator:
     def _calculate_gate_readiness(self, user_id: str, language_id: str) -> float:
         """
         Calculate how ready user is to pass soft gates.
-        Returns average % of prerequisite mastery across all gated topics.
+        Uses WEIGHTED AVERAGE of prerequisite mastery (not simple average).
         """
         gates = self.config.transition_map['soft_gates']
         if not gates:
@@ -262,21 +262,39 @@ class StateVectorGenerator:
             prereqs = gate['prerequisite_mappings']
             min_required = gate['minimum_allowable_score']
             
-            # Fetch current mastery for prerequisites
+            # Get prerequisite weights (defaults to equal if not defined)
+            weights = gate.get('prerequisite_strength_weights', [1.0] * len(prereqs))
+            
+            if len(weights) != len(prereqs):
+                # Fallback to equal weights if mismatch
+                weights = [1.0] * len(prereqs)
+            
+            # Fetch mastery scores for each prerequisite
             query = text("""
-                SELECT AVG(mastery_score) 
+                SELECT mapping_id, mastery_score
                 FROM student_state 
                 WHERE user_id=:u AND language_id=:l AND mapping_id IN :prereqs
             """)
             
-            avg_mastery = self.db.execute(query, {
+            prereq_scores = dict(self.db.execute(query, {
                 "u": user_id,
                 "l": language_id,
                 "prereqs": tuple(prereqs)  # Use tuple for IN clause (SQL injection safe)
-            }).scalar() or 0.0
+            }).fetchall())
+            
+            # Calculate weighted average
+            weighted_sum = 0.0
+            total_weight = 0.0
+            
+            for prereq, weight in zip(prereqs, weights):
+                mastery = prereq_scores.get(prereq, 0.0)
+                weighted_sum += mastery * weight
+                total_weight += weight
+            
+            weighted_avg = weighted_sum / total_weight if total_weight > 0 else 0.0
             
             # Calculate readiness as ratio
-            readiness = min(avg_mastery / min_required, 1.0) if min_required > 0 else 1.0
+            readiness = min(weighted_avg / min_required, 1.0) if min_required > 0 else 1.0
             readiness_scores.append(readiness)
         
         return sum(readiness_scores) / len(readiness_scores) if readiness_scores else 1.0
