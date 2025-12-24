@@ -1,0 +1,76 @@
+{
+  "concept_interdependencies": [
+    {
+      "mapping_a": "UNIV_LOOP",
+      "mapping_b": "UNIV_COND",
+      "reinforcement_coefficient": 0.10,
+      "rationale": "Loops and conditionals are tightly coupled - mastering one reinforces the other"
+    },
+    {
+      "mapping_a": "UNIV_OOP",
+      "mapping_b": "UNIV_FUNC",
+      "reinforcement_coefficient": 0.12,
+      "rationale": "Object-oriented programming builds heavily on function concepts (methods)"
+    },
+    {
+      "mapping_a": "UNIV_OOP",
+      "mapping_b": "UNIV_VAR",
+      "reinforcement_coefficient": 0.08,
+      "rationale": "OOP requires understanding of instance variables and attributes"
+    },
+    {
+      "mapping_a": "UNIV_FUNC",
+      "mapping_b": "UNIV_VAR",
+      "reinforcement_coefficient": 0.06,
+      "rationale": "Functions use variables as parameters and return values"
+    },
+    {
+      "mapping_a": "UNIV_COLL",
+      "mapping_b": "UNIV_LOOP",
+      "reinforcement_coefficient": 0.10,
+      "rationale": "Collections are typically manipulated using loops"
+    },
+    {
+      "mapping_a": "UNIV_COLL",
+      "mapping_b": "UNIV_FUNC",
+      "reinforcement_coefficient": 0.08,
+      "rationale": "Collections use higher-order functions like map, filter, reduce"
+    },
+    {
+      "mapping_a": "UNIV_SYN_LOGIC",
+      "mapping_b": "UNIV_COND",
+      "reinforcement_coefficient": 0.09,
+      "rationale": "Logical operators (&&, ||, !) are fundamental to conditional expressions"
+    },
+    {
+      "mapping_a": "UNIV_SYN_LOGIC",
+      "mapping_b": "UNIV_LOOP",
+      "reinforcement_coefficient": 0.07,
+      "rationale": "Loop conditions often use logical operators for complex exit criteria"
+    },
+    {
+      "mapping_a": "UNIV_SYN_PREC",
+      "mapping_b": "UNIV_VAR",
+      "reinforcement_coefficient": 0.05,
+      "rationale": "Operator precedence affects variable assignments and expressions"
+    },
+    {
+      "mapping_a": "UNIV_SYN_PREC",
+      "mapping_b": "UNIV_FUNC",
+      "reinforcement_coefficient": 0.06,
+      "rationale": "Precedence matters in function call expressions and return statements"
+    },
+    {
+      "mapping_a": "UNIV_COLL",
+      "mapping_b": "UNIV_VAR",
+      "reinforcement_coefficient": 0.07,
+      "rationale": "Collections are stored in variables and passed as references"
+    },
+    {
+      "mapping_a": "UNIV_OOP",
+      "mapping_b": "UNIV_COLL",
+      "reinforcement_coefficient": 0.09,
+      "rationale": "OOP often uses collections for managing object relationships and aggregation"
+    }
+  ]
+}

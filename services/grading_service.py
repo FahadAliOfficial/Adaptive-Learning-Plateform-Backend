@@ -105,6 +105,14 @@ class GradingService:
                 new_mastery
             )
             
+            # 6.6. Apply Concept Interdependencies (bidirectional reinforcement)
+            interdependency_boosts = self._apply_concept_interdependencies(
+                payload.user_id,
+                payload.language_id,
+                mapping_id,
+                new_mastery
+            )
+            
             # 7. Store Session History
             session_id = self._save_session_history(payload, accuracy, avg_difficulty, fluency_ratio)
             
@@ -129,7 +137,7 @@ class GradingService:
                 accuracy=round(accuracy, 3),
                 fluency_ratio=round(fluency_ratio, 2),
                 new_mastery_score=round(new_mastery, 3),
-                synergies_applied=synergies_applied + transfer_bonuses,  # Combined
+                synergies_applied=synergies_applied + transfer_bonuses + interdependency_boosts,  # All bonuses combined
                 soft_gate_violations=gate_violations,
                 recommendations=recommendations
             )
@@ -313,6 +321,66 @@ class GradingService:
                 if pattern.get('error_code') == error_type:
                     return pattern.get('remediation_boost', 0.0)
         return 0.0  # No boost defined for this error
+    
+    def _apply_concept_interdependencies(
+        self, 
+        user_id: str, 
+        language_id: str, 
+        mapping_id: str, 
+        new_mastery: float
+    ) -> List[str]:
+        """
+        Apply bidirectional reinforcement between related concepts.
+        When mastery in one mapping improves, boost related mappings.
+        
+        Example:
+        - If UNIV_LOOP mastery increases, boost UNIV_COND by 10%
+        - If UNIV_OOP mastery increases, boost UNIV_FUNC and UNIV_VAR
+        """
+        interdeps = self.config.transition_map.get('concept_interdependencies', [])
+        
+        if not interdeps:
+            return []  # No interdependencies defined
+        
+        applied = []
+        
+        for interdep in interdeps:
+            mapping_a = interdep.get('mapping_a')
+            mapping_b = interdep.get('mapping_b')
+            coefficient = interdep.get('reinforcement_coefficient', 0.0)
+            
+            # Check if current mapping matches either side of the relationship
+            if mapping_id == mapping_a:
+                # Boost mapping_b
+                target_mapping = mapping_b
+            elif mapping_id == mapping_b:
+                # Boost mapping_a (bidirectional)
+                target_mapping = mapping_a
+            else:
+                continue  # This interdependency doesn't involve current mapping
+            
+            # Apply boost to related concept
+            boost_amount = new_mastery * coefficient  # e.g., 0.8 mastery * 0.10 = 0.08 boost
+            
+            # Update target mapping mastery
+            update_query = text("""
+                UPDATE student_state
+                SET mastery_score = LEAST(mastery_score + :boost, 1.0),
+                    last_updated = NOW()
+                WHERE user_id = :u AND language_id = :l AND mapping_id = :m
+            """)
+            
+            result = self.db.execute(update_query, {
+                "boost": boost_amount,
+                "u": user_id,
+                "l": language_id,
+                "m": target_mapping
+            })
+            
+            if result.rowcount > 0:
+                applied.append(f"{target_mapping}:+{boost_amount:.3f}")
+        
+        return applied
     
     def _apply_cross_language_transfer(
         self, 
