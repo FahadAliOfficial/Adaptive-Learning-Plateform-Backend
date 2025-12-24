@@ -1,0 +1,131 @@
+{
+  "missing_components": {
+    "1_temporal_learning_patterns": {
+      "description": "Optimal time allocation per topic based on difficulty",
+      "example": {
+        "mapping_id": "UNIV_VAR",
+        "language_id": "python_3",
+        "estimated_hours": 3.5,
+        "min_practice_problems": 15,
+        "optimal_session_length": 45
+      },
+      "importance": "HIGH - Helps RL model decide session duration"
+    },
+    "2_question_difficulty_tiers": {
+      "description": "Progressive difficulty levels within each topic",
+      "example": {
+        "major_topic_id": "PY_VAR_01",
+        "difficulty_levels": {
+          "beginner": { "weight": 0.3, "min_mastery": 0.5 },
+          "intermediate": { "weight": 0.5, "min_mastery": 0.7 },
+          "advanced": { "weight": 0.8, "min_mastery": 0.85 }
+        }
+      },
+      "importance": "HIGH - Critical for question selection"
+    },
+    "3_spaced_repetition_intervals": {
+      "description": "Optimal review intervals based on mastery level",
+      "example": {
+        "mastery_ranges": [
+          { "range": [0.0, 0.5], "review_after_days": 1 },
+          { "range": [0.5, 0.7], "review_after_days": 3 },
+          { "range": [0.7, 0.85], "review_after_days": 7 },
+          { "range": [0.85, 1.0], "review_after_days": 14 }
+        ]
+      },
+      "importance": "MEDIUM - Enhances retention modeling"
+    },
+    "4_error_pattern_taxonomy": {
+      "description": "Common mistakes and misconceptions per topic",
+      "example": {
+        "major_topic_id": "PY_VAR_01",
+        "common_errors": [
+          { "error_type": "TYPE_CONFUSION", "severity": 0.7, "remediation_boost": 0.15 },
+          { "error_type": "SCOPE_MISUNDERSTANDING", "severity": 0.5, "remediation_boost": 0.10 }
+        ]
+      },
+      "importance": "MEDIUM - Helps RL model identify weak areas"
+    },
+    "5_milestone_projects": {
+      "description": "Real-world projects that integrate multiple topics",
+      "example": {
+        "project_id": "BUILD_TODO_APP",
+        "required_topics": ["UNIV_VAR", "UNIV_COND", "UNIV_LOOP", "UNIV_FUNC", "UNIV_COLL"],
+        "language_id": "python_3",
+        "estimated_completion_time": 120,
+        "mastery_verification_weight": 1.5
+      },
+      "importance": "HIGH - Validates integration of concepts"
+    },
+    "6_prerequisite_strength_weights": {
+      "description": "How strongly each prerequisite affects the next topic",
+      "example": {
+        "target_topic": "UNIV_OOP",
+        "weighted_prerequisites": [
+          { "prereq": "UNIV_VAR", "weight": 0.4 },
+          { "prereq": "UNIV_FUNC", "weight": 0.5 },
+          { "prereq": "UNIV_COLL", "weight": 0.3 }
+        ]
+      },
+      "importance": "MEDIUM - Refines soft gate penalties"
+    },
+    "7_multi_language_synergy": {
+      "description": "Bonus for learning 3+ languages simultaneously",
+      "example": {
+        "language_set": ["python_3", "javascript_es6", "java_17"],
+        "synergy_bonus": 0.12,
+        "rationale": "Pattern recognition across paradigms accelerates meta-learning"
+      },
+      "importance": "LOW - Nice-to-have for polyglots"
+    },
+    "8_adaptive_difficulty_curves": {
+      "description": "Dynamic difficulty adjustment based on learner performance",
+      "example": {
+        "base_difficulty": 0.20,
+        "performance_multipliers": [
+          { "accuracy_range": [0.9, 1.0], "multiplier": 1.3 },
+          { "accuracy_range": [0.7, 0.9], "multiplier": 1.0 },
+          { "accuracy_range": [0.0, 0.7], "multiplier": 0.7 }
+        ]
+      },
+      "importance": "HIGH - Core RL personalization feature"
+    },
+    "9_concept_interdependencies": {
+      "description": "Cross-topic relationships beyond linear prerequisites",
+      "example": {
+        "topic": "UNIV_LOOP",
+        "reinforces": [
+          { "target": "UNIV_COND", "strength": 0.8 },
+          { "target": "UNIV_VAR", "strength": 0.5 }
+        ],
+        "requires_understanding_of": [
+          { "source": "UNIV_COND", "minimum_mastery": 0.6 }
+        ]
+      },
+      "importance": "MEDIUM - Improves knowledge graph"
+    },
+    "10_learning_style_modifiers": {
+      "description": "Adjustments for different learning preferences",
+      "example": {
+        "learning_styles": [
+          { "style": "visual", "content_type_preference": "diagrams", "boost": 0.15 },
+          { "style": "kinesthetic", "content_type_preference": "coding_exercises", "boost": 0.20 },
+          { "style": "reading", "content_type_preference": "documentation", "boost": 0.10 }
+        ]
+      },
+      "importance": "LOW - Requires content type metadata"
+    }
+  },
+  "recommended_priority": [
+    "2_question_difficulty_tiers",
+    "8_adaptive_difficulty_curves",
+    "5_milestone_projects",
+    "1_temporal_learning_patterns",
+    "3_spaced_repetition_intervals",
+    "4_error_pattern_taxonomy",
+    "6_prerequisite_strength_weights",
+    "9_concept_interdependencies",
+    "7_multi_language_synergy",
+    "10_learning_style_modifiers"
+  ]
+}

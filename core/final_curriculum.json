@@ -1,0 +1,352 @@
+[
+  {
+    "language_id": "python_3",
+    "name": "Python",
+    "roadmap": [
+      {
+        "major_topic_id": "PY_SYN_LOGIC",
+        "mapping_id": "UNIV_SYN_LOGIC",
+        "name": "Programming Logic Foundations",
+        "global_difficulty": 0.05,
+        "prerequisites": [],
+        "sub_topics": ["Entry Points", "Comments", "Interpreted Flow", "Block Scoping", "REPL and Interpreters"]
+      },
+      {
+        "major_topic_id": "PY_SYN_PREC",
+        "mapping_id": "UNIV_SYN_PREC",
+        "name": "Python Syntax Precision",
+        "global_difficulty": 0.08,
+        "prerequisites": ["PY_SYN_LOGIC"],
+        "sub_topics": ["Indentation Rules", "Indentation-based Scoping", "PEP 8 Naming", "PEP 8 Standards", "Colon Usage", "Comment Syntax"]
+      },
+      {
+        "major_topic_id": "PY_VAR_01",
+        "mapping_id": "UNIV_VAR",
+        "name": "Variables and Types",
+        "global_difficulty": 0.10,
+        "prerequisites": ["PY_SYN_PREC"],
+        "sub_topics": ["Dynamic Typing", "Integers and Floats", "String Formatting", "Boolean Logic", "NoneType"]
+      },
+      {
+        "major_topic_id": "PY_COND_01",
+        "mapping_id": "UNIV_COND",
+        "name": "Conditionals",
+        "global_difficulty": 0.15,
+        "prerequisites": ["PY_VAR_01"],
+        "sub_topics": ["If-Elif-Else", "Logical Operators", "Membership Operators (in)", "Identity Operators (is)"]
+      },
+      {
+        "major_topic_id": "PY_LOOP_01",
+        "mapping_id": "UNIV_LOOP",
+        "name": "Iteration",
+        "global_difficulty": 0.20,
+        "prerequisites": ["PY_COND_01"],
+        "sub_topics": ["For-in Loops", "While Loops", "Range Object", "Break/Continue", "List Comprehensions"]
+      },
+      {
+        "major_topic_id": "PY_FUNC_01",
+        "mapping_id": "UNIV_FUNC",
+        "name": "Functions",
+        "global_difficulty": 0.25,
+        "prerequisites": ["PY_LOOP_01"],
+        "sub_topics": ["Def Statement", "Arguments", "Positional and Keyword Args", "Return Statements", "Returns", "Lambda Expressions", "Global vs Local Scope", "Scope"]
+      },
+      {
+        "major_topic_id": "PY_COLL_01",
+        "mapping_id": "UNIV_COLL",
+        "name": "Data Structures",
+        "global_difficulty": 0.30,
+        "prerequisites": ["PY_FUNC_01"],
+        "sub_topics": ["Lists", "Mutable Lists", "Tuples", "Immutable Tuples", "Dictionaries", "Key-Value Dictionaries", "Set Operations", "Slicing"]
+      },
+      {
+        "major_topic_id": "PY_OOP_01",
+        "mapping_id": "UNIV_OOP",
+        "name": "OOP Basics",
+        "global_difficulty": 0.45,
+        "prerequisites": ["PY_COLL_01"],
+        "sub_topics": ["Class Declaration", "Classes", "The self Reference", "Self", "Constructor (__init__)", "Inheritance", "Instance vs Static Methods", "Methods"]
+      }
+    ]
+  },
+  {
+    "language_id": "javascript_es6",
+    "name": "JavaScript",
+    "roadmap": [
+      {
+        "major_topic_id": "JS_SYN_LOGIC",
+        "mapping_id": "UNIV_SYN_LOGIC",
+        "name": "JS Engine Basics",
+        "global_difficulty": 0.08,
+        "prerequisites": [],
+        "sub_topics": ["Console Log", "Console Logging", "Execution Order", "Expressions", "Statement vs Expression"]
+      },
+      {
+        "major_topic_id": "JS_SYN_PREC",
+        "mapping_id": "UNIV_SYN_PREC",
+        "name": "ES6 Syntax Precision",
+        "global_difficulty": 0.10,
+        "prerequisites": ["JS_SYN_LOGIC"],
+        "sub_topics": ["Semicolons", "Semi-colon Usage", "Braces", "Strict Equality", "Strict Equality (===)", "Case Sensitivity"]
+      },
+      {
+        "major_topic_id": "JS_VAR_01",
+        "mapping_id": "UNIV_VAR",
+        "name": "Variables",
+        "global_difficulty": 0.12,
+        "prerequisites": ["JS_SYN_PREC"],
+        "sub_topics": ["Let/Const", "Let, Const, Var", "Template Literals", "Weak Typing", "Undefined and Null"]
+      },
+      {
+        "major_topic_id": "JS_COND_01",
+        "mapping_id": "UNIV_COND",
+        "name": "Conditionals",
+        "global_difficulty": 0.18,
+        "prerequisites": ["JS_VAR_01"],
+        "sub_topics": ["If-Else Blocks", "Switch", "Switch-Case", "Ternary", "Ternary Operator", "Short-circuit", "Short-circuit Evaluation"]
+      },
+      {
+        "major_topic_id": "JS_LOOP_01",
+        "mapping_id": "UNIV_LOOP",
+        "name": "Iteration",
+        "global_difficulty": 0.22,
+        "prerequisites": ["JS_COND_01"],
+        "sub_topics": ["For Loops", "For-of/in", "For-of vs For-in", "While", "While and Do-While", "Do-While", "Labels", "Break and Label"]
+      },
+      {
+        "major_topic_id": "JS_FUNC_01",
+        "mapping_id": "UNIV_FUNC",
+        "name": "Functions",
+        "global_difficulty": 0.35,
+        "prerequisites": ["JS_LOOP_01"],
+        "sub_topics": ["Arrows", "Arrow Functions", "Callback Mechanics", "Closures", "Scope and Closures", "Rest/Spread Params", "Hoisting"]
+      },
+      {
+        "major_topic_id": "JS_COLL_01",
+        "mapping_id": "UNIV_COLL",
+        "name": "Data Structures",
+        "global_difficulty": 0.30,
+        "prerequisites": ["JS_FUNC_01"],
+        "sub_topics": ["Map/Filter", "Array Methods (Map/Filter)", "Destructuring", "Objects", "Object Literals", "Map and Set Objects"]
+      },
+      {
+        "major_topic_id": "JS_OOP_01",
+        "mapping_id": "UNIV_OOP",
+        "name": "OOP Basics",
+        "global_difficulty": 0.50,
+        "prerequisites": ["JS_COLL_01"],
+        "sub_topics": ["Class Keyword", "Constructor Function", "Prototypes", "This Keyword Binding", "This Binding", "Super Calls"]
+      }
+    ]
+  },
+  {
+    "language_id": "java_17",
+    "name": "Java",
+    "roadmap": [
+      {
+        "major_topic_id": "JV_SYN_LOGIC",
+        "mapping_id": "UNIV_SYN_LOGIC",
+        "name": "JVM Concepts",
+        "global_difficulty": 0.12,
+        "prerequisites": [],
+        "sub_topics": ["Class Wrappers", "Class Wrapper", "Main Method", "Main Method Boilerplate"]
+      },
+      {
+        "major_topic_id": "JV_SYN_PREC",
+        "mapping_id": "UNIV_SYN_PREC",
+        "name": "Java Precision",
+        "global_difficulty": 0.15,
+        "prerequisites": ["JV_SYN_LOGIC"],
+        "sub_topics": ["Terminators", "Statement Terminators", "Block Scoping", "Strong Typing Rules"]
+      },
+      {
+        "major_topic_id": "JV_VAR_01",
+        "mapping_id": "UNIV_VAR",
+        "name": "Static Typing",
+        "global_difficulty": 0.20,
+        "prerequisites": ["JV_SYN_PREC"],
+        "sub_topics": ["Primitives", "Primitive Data Types", "Variable Declaration", "Final", "Final Keyword", "Casting", "Type Casting", "Reference Types"]
+      },
+      {
+        "major_topic_id": "JV_COND_01",
+        "mapping_id": "UNIV_COND",
+        "name": "Conditionals",
+        "global_difficulty": 0.22,
+        "prerequisites": ["JV_VAR_01"],
+        "sub_topics": ["If-Else-If", "Switch Yield", "Switch Expressions", "Relational Eval", "Relational Evaluation", "Logical Operators"]
+      },
+      {
+        "major_topic_id": "JV_LOOP_01",
+        "mapping_id": "UNIV_LOOP",
+        "name": "Iteration",
+        "global_difficulty": 0.25,
+        "prerequisites": ["JV_COND_01"],
+        "sub_topics": ["Standard For Loop", "Enhanced For", "Enhanced For (Each)", "While/Do-While", "Loop Control"]
+      },
+      {
+        "major_topic_id": "JV_FUNC_01",
+        "mapping_id": "UNIV_FUNC",
+        "name": "Methods",
+        "global_difficulty": 0.30,
+        "prerequisites": ["JV_LOOP_01"],
+        "sub_topics": ["Signatures", "Method Signatures", "Return Types", "Parameter Passing", "Overloading", "Method Overloading", "Statics", "Static Methods"]
+      },
+      {
+        "major_topic_id": "JV_COLL_01",
+        "mapping_id": "UNIV_COLL",
+        "name": "Collections",
+        "global_difficulty": 0.40,
+        "prerequisites": ["JV_FUNC_01"],
+        "sub_topics": ["Fixed-size Arrays", "ArrayList", "ArrayList Class", "Generics Basics", "Maps", "HashMap/HashSet"]
+      },
+      {
+        "major_topic_id": "JV_OOP_01",
+        "mapping_id": "UNIV_OOP",
+        "name": "Strict OOP",
+        "global_difficulty": 0.55,
+        "prerequisites": ["JV_COLL_01"],
+        "sub_topics": ["Encapsulation", "Encapsulation (Getters/Setters)", "Inheritance (Extends)", "Interfaces", "Polymorphism", "Abstract Classes"]
+      }
+    ]
+  },
+  {
+    "language_id": "cpp_20",
+    "name": "C++",
+    "roadmap": [
+      {
+        "major_topic_id": "CPP_SYN_LOGIC",
+        "mapping_id": "UNIV_SYN_LOGIC",
+        "name": "Compilation Flow",
+        "global_difficulty": 0.18,
+        "prerequisites": [],
+        "sub_topics": ["Preprocessor", "Include Preprocessor", "Main Signature", "Main Function Signature"]
+      },
+      {
+        "major_topic_id": "CPP_SYN_PREC",
+        "mapping_id": "UNIV_SYN_PREC",
+        "name": "CPP Precision",
+        "global_difficulty": 0.22,
+        "prerequisites": ["CPP_SYN_LOGIC"],
+        "sub_topics": ["Namespaces", "Namespace Std", "Declarations", "Declaration vs Definition"]
+      },
+      {
+        "major_topic_id": "CPP_VAR_01",
+        "mapping_id": "UNIV_VAR",
+        "name": "Memory & Types",
+        "global_difficulty": 0.35,
+        "prerequisites": ["CPP_SYN_PREC"],
+        "sub_topics": ["Static Typing", "Pointers", "Pointers and Addresses", "References", "References (&)", "Const", "Const Qualifiers", "Explicit Casting"]
+      },
+      {
+        "major_topic_id": "CPP_COND_01",
+        "mapping_id": "UNIV_COND",
+        "name": "Conditionals",
+        "global_difficulty": 0.32,
+        "prerequisites": ["CPP_VAR_01"],
+        "sub_topics": ["If-Else Blocks", "Truthiness", "Truthiness (Non-zero)", "Switch", "Switch Statement", "Boolean Logic"]
+      },
+      {
+        "major_topic_id": "CPP_LOOP_01",
+        "mapping_id": "UNIV_LOOP",
+        "name": "Iteration",
+        "global_difficulty": 0.35,
+        "prerequisites": ["CPP_COND_01"],
+        "sub_topics": ["Standard For", "While/Do-While", "Range-based", "Range-based Loops", "Labels", "Break/Continue Labels"]
+      },
+      {
+        "major_topic_id": "CPP_FUNC_01",
+        "mapping_id": "UNIV_FUNC",
+        "name": "Functions",
+        "global_difficulty": 0.42,
+        "prerequisites": ["CPP_LOOP_01"],
+        "sub_topics": ["Prototypes", "Function Prototypes", "Pass-by-Ref", "Pass by Value/Pointer/Ref", "Inline", "Inline Functions", "Default Arguments", "Return Types"]
+      },
+      {
+        "major_topic_id": "CPP_COLL_01",
+        "mapping_id": "UNIV_COLL",
+        "name": "STL & Memory",
+        "global_difficulty": 0.50,
+        "prerequisites": ["CPP_FUNC_01"],
+        "sub_topics": ["C-style Arrays", "Vectors", "STL Vectors", "STL Maps/Sets", "New/Delete", "Memory Allocation (new/delete)", "Pointer Math", "Pointer Arithmetic"]
+      },
+      {
+        "major_topic_id": "CPP_OOP_01",
+        "mapping_id": "UNIV_OOP",
+        "name": "Advanced OOP",
+        "global_difficulty": 0.65,
+        "prerequisites": ["CPP_COLL_01"],
+        "sub_topics": ["Access Specifiers", "Constructors/Destructors", "Virtual Funcs", "Virtual Functions", "Overloading", "Operator Overloading", "Destructors", "Multiple Inheritance"]
+      }
+    ]
+  },
+  {
+    "language_id": "go_1_21",
+    "name": "Go",
+    "roadmap": [
+      {
+        "major_topic_id": "GO_SYN_LOGIC",
+        "mapping_id": "UNIV_SYN_LOGIC",
+        "name": "Package Flow",
+        "global_difficulty": 0.08,
+        "prerequisites": [],
+        "sub_topics": ["Imports", "Import Keyword", "Entry Points", "Func Main Entry", "Package Declaration"]
+      },
+      {
+        "major_topic_id": "GO_SYN_PREC",
+        "mapping_id": "UNIV_SYN_PREC",
+        "name": "Go Format",
+        "global_difficulty": 0.10,
+        "prerequisites": ["GO_SYN_LOGIC"],
+        "sub_topics": ["Semicolon Insertion", "Go Fmt"]
+      },
+      {
+        "major_topic_id": "GO_VAR_01",
+        "mapping_id": "UNIV_VAR",
+        "name": "Types & Pointers",
+        "global_difficulty": 0.15,
+        "prerequisites": ["GO_SYN_PREC"],
+        "sub_topics": ["Short Decl", "Var vs Short Declaration", "Zero Values", "Constants", "Pointers", "Basic Pointers", "Static Type Inference"]
+      },
+      {
+        "major_topic_id": "GO_COND_01",
+        "mapping_id": "UNIV_COND",
+        "name": "Go Control",
+        "global_difficulty": 0.18,
+        "prerequisites": ["GO_VAR_01"],
+        "sub_topics": ["Init If", "If with Initializer", "Type Switches", "Switch (No Break Needed)", "Boolean Conditionals"]
+      },
+      {
+        "major_topic_id": "GO_LOOP_01",
+        "mapping_id": "UNIV_LOOP",
+        "name": "Iteration",
+        "global_difficulty": 0.20,
+        "prerequisites": ["GO_COND_01"],
+        "sub_topics": ["Unified For", "Unified For Loop", "Range", "Range Clause", "While-style For", "Infinite Loops"]
+      },
+      {
+        "major_topic_id": "GO_FUNC_01",
+        "mapping_id": "UNIV_FUNC",
+        "name": "Functions",
+        "global_difficulty": 0.25,
+        "prerequisites": ["GO_LOOP_01"],
+        "sub_topics": ["Multi-return", "Multiple Return Values", "Defer", "Defer Mechanism", "Named Returns", "Variadic Parameters", "Function Types"]
+      },
+      {
+        "major_topic_id": "GO_COLL_01",
+        "mapping_id": "UNIV_COLL",
+        "name": "Structs & Slices",
+        "global_difficulty": 0.35,
+        "prerequisites": ["GO_FUNC_01"],
+        "sub_topics": ["Arrays vs Slices", "Append", "Make and Append", "Maps", "Maps (Key-Value)", "Structs", "Struct Declarations", "Slice Internal Header"]
+      },
+      {
+        "major_topic_id": "GO_OOP_01",
+        "mapping_id": "UNIV_OOP",
+        "name": "Composition",
+        "global_difficulty": 0.45,
+        "prerequisites": ["GO_COLL_01"],
+        "sub_topics": ["Receivers", "Methods (Value/Pointer Receivers)", "Interfaces", "Embedding", "Struct Embedding (Composition)", "Type Assertions"]
+      }
+    ]
+  }
+]

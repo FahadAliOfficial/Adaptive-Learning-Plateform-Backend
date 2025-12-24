@@ -1,0 +1,1003 @@
+{
+  "version": "4.0",
+  "description": "Comprehensive transition map covering universal topic transitions, cross-language transfers, synergies, and mastery gates",
+  "config": {
+    "decay_rate_per_day": 0.02,
+    "review_multiplier": 1.5,
+    "maintenance_threshold": 0.65,
+    "description": "Global configuration for knowledge retention and review mechanics"
+  },
+  "universal_transitions": [
+    {
+      "transition_id": "TRANS_SYN_LOGIC_TO_SYN_PREC",
+      "source_mapping_id": "UNIV_SYN_LOGIC",
+      "target_mapping_id": "UNIV_SYN_PREC",
+      "transfer_coefficient": 0.90,
+      "rationale": "Understanding program execution flow naturally leads to learning precise syntax rules and conventions."
+    },
+    {
+      "transition_id": "TRANS_SYN_PREC_TO_VAR",
+      "source_mapping_id": "UNIV_SYN_PREC",
+      "target_mapping_id": "UNIV_VAR",
+      "transfer_coefficient": 0.85,
+      "rationale": "High transferability as understanding syntax precision is the prerequisite for declaring and using variables across all languages."
+    },
+    {
+      "transition_id": "TRANS_VAR_TO_COND",
+      "source_mapping_id": "UNIV_VAR",
+      "target_mapping_id": "UNIV_COND",
+      "transfer_coefficient": 0.75,
+      "rationale": "Conditionals rely heavily on mastery of boolean types and comparison operators learned in the Variables phase."
+    },
+    {
+      "transition_id": "TRANS_COND_TO_LOOP",
+      "source_mapping_id": "UNIV_COND",
+      "target_mapping_id": "UNIV_LOOP",
+      "transfer_coefficient": 0.80,
+      "rationale": "Loops are essentially repetitive conditionals; mastering 'if' logic directly translates to 'while' and 'for' termination conditions."
+    },
+    {
+      "transition_id": "TRANS_LOOP_TO_FUNC",
+      "source_mapping_id": "UNIV_LOOP",
+      "target_mapping_id": "UNIV_FUNC",
+      "transfer_coefficient": 0.60,
+      "rationale": "Logic encapsulation in functions often involves iterative processing, though the concept of scope adds new complexity."
+    },
+    {
+      "transition_id": "TRANS_FUNC_TO_COLL",
+      "source_mapping_id": "UNIV_FUNC",
+      "target_mapping_id": "UNIV_COLL",
+      "transfer_coefficient": 0.70,
+      "rationale": "Passing collections to functions and returning them is a core pattern. Mastery of function signatures eases the use of collection methods."
+    },
+    {
+      "transition_id": "TRANS_COLL_TO_OOP",
+      "source_mapping_id": "UNIV_COLL",
+      "target_mapping_id": "UNIV_OOP",
+      "transfer_coefficient": 0.65,
+      "rationale": "Objects/Classes are often conceptualized as complex data structures. Understanding how to manage data in lists/maps assists in managing state in objects."
+    }
+  ],
+  "intra_language_synergy": [
+    {
+      "trigger_mapping_id": "UNIV_LOOP",
+      "target_mapping_id": "UNIV_COND",
+      "synergy_bonus": 0.08,
+      "description": "Practicing loops reinforces conditional logic understanding"
+    },
+    {
+      "trigger_mapping_id": "UNIV_FUNC",
+      "target_mapping_id": "UNIV_VAR",
+      "synergy_bonus": 0.10,
+      "description": "Function parameters and scope deepen variable comprehension"
+    },
+    {
+      "trigger_mapping_id": "UNIV_COLL",
+      "target_mapping_id": "UNIV_LOOP",
+      "synergy_bonus": 0.12,
+      "description": "Working with collections heavily reinforces iteration patterns"
+    },
+    {
+      "trigger_mapping_id": "UNIV_OOP",
+      "target_mapping_id": "UNIV_COLL",
+      "synergy_bonus": 0.05,
+      "description": "Object-oriented programming reinforces data structure management"
+    },
+    {
+      "trigger_mapping_id": "UNIV_OOP",
+      "target_mapping_id": "UNIV_FUNC",
+      "synergy_bonus": 0.07,
+      "description": "Methods in OOP deepen understanding of function concepts"
+    }
+  ],
+  "cross_language_transfer": [
+    {
+      "transfer_id": "PYTHON_TO_JAVASCRIPT",
+      "source_language_id": "python_3",
+      "target_language_id": "javascript_es6",
+      "logic_acceleration": 0.88,
+      "syntax_friction": -0.15,
+      "note": "Similar high-level abstractions; main friction is braces vs indentation and type coercion"
+    },
+    {
+      "transfer_id": "PYTHON_TO_JAVA",
+      "source_language_id": "python_3",
+      "target_language_id": "java_17",
+      "logic_acceleration": 0.85,
+      "syntax_friction": -0.30,
+      "note": "Conceptual transfer is high; syntax friction from dynamic to static typing and OOP strictness"
+    },
+    {
+      "transfer_id": "PYTHON_TO_CPP",
+      "source_language_id": "python_3",
+      "target_language_id": "cpp_20",
+      "logic_acceleration": 0.70,
+      "syntax_friction": -0.50,
+      "note": "Significant friction from memory management, pointers, and compilation complexity"
+    },
+    {
+      "transfer_id": "PYTHON_TO_GO",
+      "source_language_id": "python_3",
+      "target_language_id": "go_1_21",
+      "logic_acceleration": 0.75,
+      "syntax_friction": -0.20,
+      "note": "Go's simplicity helps, but static typing and explicit error handling add friction"
+    },
+    {
+      "transfer_id": "JAVASCRIPT_TO_PYTHON",
+      "source_language_id": "javascript_es6",
+      "target_language_id": "python_3",
+      "logic_acceleration": 0.90,
+      "syntax_friction": 0.10,
+      "note": "Very smooth transition; Python's clean syntax feels like an acceleration"
+    },
+    {
+      "transfer_id": "JAVASCRIPT_TO_JAVA",
+      "source_language_id": "javascript_es6",
+      "target_language_id": "java_17",
+      "logic_acceleration": 0.78,
+      "syntax_friction": -0.35,
+      "note": "Static typing and strict OOP are major friction points from JS's flexibility"
+    },
+    {
+      "transfer_id": "JAVASCRIPT_TO_CPP",
+      "source_language_id": "javascript_es6",
+      "target_language_id": "cpp_20",
+      "logic_acceleration": 0.65,
+      "syntax_friction": -0.55,
+      "note": "Memory management and low-level control create significant challenges"
+    },
+    {
+      "transfer_id": "JAVASCRIPT_TO_GO",
+      "source_language_id": "javascript_es6",
+      "target_language_id": "go_1_21",
+      "logic_acceleration": 0.80,
+      "syntax_friction": -0.10,
+      "note": "Goroutines and channels are new concepts, but overall transition is smooth"
+    },
+    {
+      "transfer_id": "JAVA_TO_PYTHON",
+      "source_language_id": "java_17",
+      "target_language_id": "python_3",
+      "logic_acceleration": 0.92,
+      "syntax_friction": 0.25,
+      "note": "Python feels liberating after Java's verbosity; acceleration from reduced boilerplate"
+    },
+    {
+      "transfer_id": "JAVA_TO_JAVASCRIPT",
+      "source_language_id": "java_17",
+      "target_language_id": "javascript_es6",
+      "logic_acceleration": 0.85,
+      "syntax_friction": 0.15,
+      "note": "OOP foundation helps, but prototype-based inheritance and weak typing need adjustment"
+    },
+    {
+      "transfer_id": "JAVA_TO_CPP",
+      "source_language_id": "java_17",
+      "target_language_id": "cpp_20",
+      "logic_acceleration": 0.95,
+      "syntax_friction": -0.40,
+      "note": "Strong OOP and static typing transfer well; manual memory management is the major friction"
+    },
+    {
+      "transfer_id": "JAVA_TO_GO",
+      "source_language_id": "java_17",
+      "target_language_id": "go_1_21",
+      "logic_acceleration": 0.82,
+      "syntax_friction": -0.12,
+      "note": "Static typing helps, but composition over inheritance requires mindset shift"
+    },
+    {
+      "transfer_id": "CPP_TO_PYTHON",
+      "source_language_id": "cpp_20",
+      "target_language_id": "python_3",
+      "logic_acceleration": 0.95,
+      "syntax_friction": 0.40,
+      "note": "Massive acceleration from automatic memory management and simpler syntax"
+    },
+    {
+      "transfer_id": "CPP_TO_JAVASCRIPT",
+      "source_language_id": "cpp_20",
+      "target_language_id": "javascript_es6",
+      "logic_acceleration": 0.88,
+      "syntax_friction": 0.30,
+      "note": "High-level abstractions feel easy after C++; weak typing is unusual but liberating"
+    },
+    {
+      "transfer_id": "CPP_TO_JAVA",
+      "source_language_id": "cpp_20",
+      "target_language_id": "java_17",
+      "logic_acceleration": 0.98,
+      "syntax_friction": 0.35,
+      "note": "C++ mastery makes Java syntax feel like a simplified, safer subset"
+    },
+    {
+      "transfer_id": "CPP_TO_GO",
+      "source_language_id": "cpp_20",
+      "target_language_id": "go_1_21",
+      "logic_acceleration": 0.90,
+      "syntax_friction": 0.30,
+      "note": "Go's simplicity and garbage collection feel like an acceleration after C++"
+    },
+    {
+      "transfer_id": "GO_TO_PYTHON",
+      "source_language_id": "go_1_21",
+      "target_language_id": "python_3",
+      "logic_acceleration": 0.85,
+      "syntax_friction": 0.15,
+      "note": "Python's dynamic nature and extensive stdlib feel powerful after Go's minimalism"
+    },
+    {
+      "transfer_id": "GO_TO_JAVASCRIPT",
+      "source_language_id": "go_1_21",
+      "target_language_id": "javascript_es6",
+      "logic_acceleration": 0.82,
+      "syntax_friction": 0.05,
+      "note": "Function-first approach transfers well; async patterns differ but concepts align"
+    },
+    {
+      "transfer_id": "GO_TO_JAVA",
+      "source_language_id": "go_1_21",
+      "target_language_id": "java_17",
+      "logic_acceleration": 0.80,
+      "syntax_friction": -0.18,
+      "note": "Static typing helps, but Java's OOP strictness and verbosity create friction"
+    },
+    {
+      "transfer_id": "GO_TO_CPP",
+      "source_language_id": "go_1_21",
+      "target_language_id": "cpp_20",
+      "logic_acceleration": 0.75,
+      "syntax_friction": -0.45,
+      "note": "Pointer concepts transfer, but manual memory management and complexity are challenging"
+    }
+  ],
+  "mapping_specific_cross_language_transfer": [
+    {
+      "mapping_id": "UNIV_SYN_LOGIC",
+      "source_language_id": "cpp_20",
+      "target_language_id": "java_17",
+      "acceleration_factor": 0.92,
+      "note": "Compilation and main method concepts transfer nearly perfectly"
+    },
+    {
+      "mapping_id": "UNIV_SYN_PREC",
+      "source_language_id": "cpp_20",
+      "target_language_id": "java_17",
+      "acceleration_factor": 0.95,
+      "note": "C++ syntax mastery makes Java syntax feel like a simplified subset"
+    },
+    {
+      "mapping_id": "UNIV_VAR",
+      "source_language_id": "python_3",
+      "target_language_id": "go_1_21",
+      "acceleration_factor": 0.40,
+      "note": "Lower acceleration due to transition from dynamic typing to Go's strict static typing and pointer basics"
+    },
+    {
+      "mapping_id": "UNIV_VAR",
+      "source_language_id": "java_17",
+      "target_language_id": "cpp_20",
+      "acceleration_factor": 0.88,
+      "note": "Static typing transfers well; pointers add complexity"
+    },
+    {
+      "mapping_id": "UNIV_COND",
+      "source_language_id": "javascript_es6",
+      "target_language_id": "python_3",
+      "acceleration_factor": 0.92,
+      "note": "Conditional logic patterns are nearly identical"
+    },
+    {
+      "mapping_id": "UNIV_LOOP",
+      "source_language_id": "javascript_es6",
+      "target_language_id": "python_3",
+      "acceleration_factor": 0.90,
+      "note": "Iteration patterns (foreach/for-in) are highly similar conceptually"
+    },
+    {
+      "mapping_id": "UNIV_LOOP",
+      "source_language_id": "python_3",
+      "target_language_id": "javascript_es6",
+      "acceleration_factor": 0.88,
+      "note": "Python's for-in directly maps to JS for-of"
+    },
+    {
+      "mapping_id": "UNIV_FUNC",
+      "source_language_id": "javascript_es6",
+      "target_language_id": "python_3",
+      "acceleration_factor": 0.85,
+      "note": "First-class functions and closures transfer well"
+    },
+    {
+      "mapping_id": "UNIV_FUNC",
+      "source_language_id": "go_1_21",
+      "target_language_id": "javascript_es6",
+      "acceleration_factor": 0.82,
+      "note": "Function patterns and closures are similar"
+    },
+    {
+      "mapping_id": "UNIV_COLL",
+      "source_language_id": "java_17",
+      "target_language_id": "cpp_20",
+      "acceleration_factor": 0.75,
+      "note": "Collection frameworks map to STL, but memory management differs"
+    },
+    {
+      "mapping_id": "UNIV_COLL",
+      "source_language_id": "python_3",
+      "target_language_id": "javascript_es6",
+      "acceleration_factor": 0.88,
+      "note": "Lists/dicts map cleanly to arrays/objects"
+    },
+    {
+      "mapping_id": "UNIV_OOP",
+      "source_language_id": "java_17",
+      "target_language_id": "cpp_20",
+      "acceleration_factor": 0.92,
+      "note": "Strong OOP foundation transfers exceptionally well"
+    },
+    {
+      "mapping_id": "UNIV_OOP",
+      "source_language_id": "cpp_20",
+      "target_language_id": "java_17",
+      "acceleration_factor": 0.95,
+      "note": "C++ OOP mastery makes Java OOP trivial"
+    },
+    {
+      "mapping_id": "UNIV_OOP",
+      "source_language_id": "python_3",
+      "target_language_id": "java_17",
+      "acceleration_factor": 0.70,
+      "note": "OOP concepts transfer but strict typing and interfaces add complexity"
+    }
+  ],
+  "soft_gates": [
+    {
+      "gate_id": "GATE_OOP_MASTERY",
+      "mapping_id": "UNIV_OOP",
+      "prerequisite_mappings": ["UNIV_VAR", "UNIV_FUNC", "UNIV_COLL"],
+      "ideal_mastery_score": 0.80,
+      "minimum_allowable_score": 0.60,
+      "penalty_steepness": 2.5,
+      "description": "OOP is a critical milestone requiring strong foundations in variables, functions, and collections"
+    },
+    {
+      "gate_id": "GATE_FUNC_MASTERY",
+      "mapping_id": "UNIV_FUNC",
+      "prerequisite_mappings": ["UNIV_VAR", "UNIV_COND", "UNIV_LOOP"],
+      "ideal_mastery_score": 0.75,
+      "minimum_allowable_score": 0.55,
+      "penalty_steepness": 2.0,
+      "description": "Functions require solid understanding of variables, control flow, and iteration"
+    },
+    {
+      "gate_id": "GATE_COLL_MASTERY",
+      "mapping_id": "UNIV_COLL",
+      "prerequisite_mappings": ["UNIV_VAR", "UNIV_LOOP"],
+      "ideal_mastery_score": 0.75,
+      "minimum_allowable_score": 0.58,
+      "penalty_steepness": 2.2,
+      "description": "Collections require strong grasp of types and iteration patterns"
+    }
+  ],
+  "language_specific_modifiers": [
+    {
+      "language_id": "cpp_20",
+      "mapping_id": "UNIV_VAR",
+      "difficulty_multiplier": 1.4,
+      "reason": "Pointers and manual memory concepts significantly increase complexity"
+    },
+    {
+      "language_id": "cpp_20",
+      "mapping_id": "UNIV_OOP",
+      "difficulty_multiplier": 1.3,
+      "reason": "Multiple inheritance, virtual functions, and destructors add complexity"
+    },
+    {
+      "language_id": "java_17",
+      "mapping_id": "UNIV_OOP",
+      "difficulty_multiplier": 1.2,
+      "reason": "Strict OOP with interfaces and abstract classes increases learning curve"
+    },
+    {
+      "language_id": "python_3",
+      "mapping_id": "UNIV_SYN_PREC",
+      "difficulty_multiplier": 0.8,
+      "reason": "Indentation-based syntax is more intuitive for beginners"
+    },
+    {
+      "language_id": "javascript_es6",
+      "mapping_id": "UNIV_FUNC",
+      "difficulty_multiplier": 1.15,
+      "reason": "Closures, hoisting, and callback patterns add complexity"
+    },
+    {
+      "language_id": "go_1_21",
+      "mapping_id": "UNIV_OOP",
+      "difficulty_multiplier": 0.9,
+      "reason": "Composition-based approach is simpler than classical inheritance"
+    }
+  ],
+  "question_difficulty_tiers": [
+    {
+      "major_topic_id": "PY_SYN_LOGIC",
+      "mapping_id": "UNIV_SYN_LOGIC",
+      "language_id": "python_3",
+      "tiers": {
+        "beginner": { "weight": 0.3, "min_mastery_to_unlock": 0.0, "target_accuracy": 0.7 },
+        "intermediate": { "weight": 0.6, "min_mastery_to_unlock": 0.5, "target_accuracy": 0.8 },
+        "advanced": { "weight": 0.9, "min_mastery_to_unlock": 0.75, "target_accuracy": 0.9 }
+      }
+    },
+    {
+      "major_topic_id": "PY_VAR_01",
+      "mapping_id": "UNIV_VAR",
+      "language_id": "python_3",
+      "tiers": {
+        "beginner": { "weight": 0.3, "min_mastery_to_unlock": 0.0, "target_accuracy": 0.7 },
+        "intermediate": { "weight": 0.6, "min_mastery_to_unlock": 0.55, "target_accuracy": 0.8 },
+        "advanced": { "weight": 0.9, "min_mastery_to_unlock": 0.75, "target_accuracy": 0.9 }
+      }
+    },
+    {
+      "major_topic_id": "PY_FUNC_01",
+      "mapping_id": "UNIV_FUNC",
+      "language_id": "python_3",
+      "tiers": {
+        "beginner": { "weight": 0.4, "min_mastery_to_unlock": 0.0, "target_accuracy": 0.65 },
+        "intermediate": { "weight": 0.7, "min_mastery_to_unlock": 0.5, "target_accuracy": 0.75 },
+        "advanced": { "weight": 1.0, "min_mastery_to_unlock": 0.7, "target_accuracy": 0.85 }
+      }
+    },
+    {
+      "major_topic_id": "PY_OOP_01",
+      "mapping_id": "UNIV_OOP",
+      "language_id": "python_3",
+      "tiers": {
+        "beginner": { "weight": 0.5, "min_mastery_to_unlock": 0.0, "target_accuracy": 0.6 },
+        "intermediate": { "weight": 0.8, "min_mastery_to_unlock": 0.45, "target_accuracy": 0.75 },
+        "advanced": { "weight": 1.2, "min_mastery_to_unlock": 0.7, "target_accuracy": 0.85 }
+      }
+    },
+    {
+      "mapping_id": "UNIV_VAR",
+      "default_for_all_languages": true,
+      "tiers": {
+        "beginner": { "weight": 0.3, "min_mastery_to_unlock": 0.0, "target_accuracy": 0.7 },
+        "intermediate": { "weight": 0.6, "min_mastery_to_unlock": 0.5, "target_accuracy": 0.8 },
+        "advanced": { "weight": 0.9, "min_mastery_to_unlock": 0.75, "target_accuracy": 0.9 }
+      }
+    },
+    {
+      "mapping_id": "UNIV_COND",
+      "default_for_all_languages": true,
+      "tiers": {
+        "beginner": { "weight": 0.35, "min_mastery_to_unlock": 0.0, "target_accuracy": 0.7 },
+        "intermediate": { "weight": 0.65, "min_mastery_to_unlock": 0.5, "target_accuracy": 0.8 },
+        "advanced": { "weight": 0.95, "min_mastery_to_unlock": 0.75, "target_accuracy": 0.9 }
+      }
+    },
+    {
+      "mapping_id": "UNIV_LOOP",
+      "default_for_all_languages": true,
+      "tiers": {
+        "beginner": { "weight": 0.4, "min_mastery_to_unlock": 0.0, "target_accuracy": 0.65 },
+        "intermediate": { "weight": 0.7, "min_mastery_to_unlock": 0.5, "target_accuracy": 0.75 },
+        "advanced": { "weight": 1.0, "min_mastery_to_unlock": 0.7, "target_accuracy": 0.85 }
+      }
+    },
+    {
+      "mapping_id": "UNIV_FUNC",
+      "default_for_all_languages": true,
+      "tiers": {
+        "beginner": { "weight": 0.45, "min_mastery_to_unlock": 0.0, "target_accuracy": 0.65 },
+        "intermediate": { "weight": 0.75, "min_mastery_to_unlock": 0.5, "target_accuracy": 0.75 },
+        "advanced": { "weight": 1.1, "min_mastery_to_unlock": 0.7, "target_accuracy": 0.85 }
+      }
+    },
+    {
+      "mapping_id": "UNIV_COLL",
+      "default_for_all_languages": true,
+      "tiers": {
+        "beginner": { "weight": 0.5, "min_mastery_to_unlock": 0.0, "target_accuracy": 0.65 },
+        "intermediate": { "weight": 0.8, "min_mastery_to_unlock": 0.5, "target_accuracy": 0.75 },
+        "advanced": { "weight": 1.1, "min_mastery_to_unlock": 0.7, "target_accuracy": 0.85 }
+      }
+    },
+    {
+      "mapping_id": "UNIV_OOP",
+      "default_for_all_languages": true,
+      "tiers": {
+        "beginner": { "weight": 0.6, "min_mastery_to_unlock": 0.0, "target_accuracy": 0.6 },
+        "intermediate": { "weight": 0.9, "min_mastery_to_unlock": 0.45, "target_accuracy": 0.7 },
+        "advanced": { "weight": 1.3, "min_mastery_to_unlock": 0.7, "target_accuracy": 0.85 }
+      }
+    }
+  ],
+  "adaptive_difficulty_curves": {
+    "description": "Dynamic difficulty adjustment based on recent learner performance",
+    "performance_windows": {
+      "sample_size": 10,
+      "description": "Number of recent questions to evaluate performance"
+    },
+    "adjustment_rules": [
+      {
+        "accuracy_range": [0.9, 1.0],
+        "difficulty_multiplier": 1.3,
+        "action": "increase_difficulty",
+        "description": "High accuracy - challenge the learner more"
+      },
+      {
+        "accuracy_range": [0.75, 0.9],
+        "difficulty_multiplier": 1.1,
+        "action": "slight_increase",
+        "description": "Good accuracy - gentle progression"
+      },
+      {
+        "accuracy_range": [0.6, 0.75],
+        "difficulty_multiplier": 1.0,
+        "action": "maintain",
+        "description": "Adequate accuracy - maintain current level"
+      },
+      {
+        "accuracy_range": [0.4, 0.6],
+        "difficulty_multiplier": 0.85,
+        "action": "slight_decrease",
+        "description": "Struggling - reduce difficulty"
+      },
+      {
+        "accuracy_range": [0.0, 0.4],
+        "difficulty_multiplier": 0.7,
+        "action": "decrease_difficulty",
+        "description": "Very low accuracy - significant difficulty reduction and review prerequisites"
+      }
+    ],
+    "mastery_boost_on_tier_completion": {
+      "beginner": 0.15,
+      "intermediate": 0.25,
+      "advanced": 0.35
+    }
+  },
+  "temporal_learning_patterns": [
+    {
+      "mapping_id": "UNIV_SYN_LOGIC",
+      "estimated_hours": 2.0,
+      "min_practice_problems": 8,
+      "optimal_session_length_minutes": 30,
+      "sessions_to_mastery": 3
+    },
+    {
+      "mapping_id": "UNIV_SYN_PREC",
+      "estimated_hours": 2.5,
+      "min_practice_problems": 12,
+      "optimal_session_length_minutes": 35,
+      "sessions_to_mastery": 4
+    },
+    {
+      "mapping_id": "UNIV_VAR",
+      "estimated_hours": 4.0,
+      "min_practice_problems": 20,
+      "optimal_session_length_minutes": 45,
+      "sessions_to_mastery": 5
+    },
+    {
+      "mapping_id": "UNIV_COND",
+      "estimated_hours": 3.5,
+      "min_practice_problems": 18,
+      "optimal_session_length_minutes": 40,
+      "sessions_to_mastery": 5
+    },
+    {
+      "mapping_id": "UNIV_LOOP",
+      "estimated_hours": 5.0,
+      "min_practice_problems": 25,
+      "optimal_session_length_minutes": 45,
+      "sessions_to_mastery": 6
+    },
+    {
+      "mapping_id": "UNIV_FUNC",
+      "estimated_hours": 8.0,
+      "min_practice_problems": 30,
+      "optimal_session_length_minutes": 50,
+      "sessions_to_mastery": 8
+    },
+    {
+      "mapping_id": "UNIV_COLL",
+      "estimated_hours": 7.0,
+      "min_practice_problems": 28,
+      "optimal_session_length_minutes": 50,
+      "sessions_to_mastery": 7
+    },
+    {
+      "mapping_id": "UNIV_OOP",
+      "estimated_hours": 12.0,
+      "min_practice_problems": 40,
+      "optimal_session_length_minutes": 60,
+      "sessions_to_mastery": 10
+    }
+  ],
+  "spaced_repetition_intervals": {
+    "description": "Optimal review intervals based on current mastery level following spaced repetition principles",
+    "intervals": [
+      {
+        "mastery_range": [0.0, 0.4],
+        "review_after_days": 1,
+        "priority": "critical",
+        "description": "Very low mastery - review immediately"
+      },
+      {
+        "mastery_range": [0.4, 0.6],
+        "review_after_days": 2,
+        "priority": "high",
+        "description": "Below maintenance threshold - frequent review needed"
+      },
+      {
+        "mastery_range": [0.6, 0.75],
+        "review_after_days": 4,
+        "priority": "medium",
+        "description": "Approaching solid understanding - moderate review"
+      },
+      {
+        "mastery_range": [0.75, 0.85],
+        "review_after_days": 7,
+        "priority": "low",
+        "description": "Good mastery - weekly review"
+      },
+      {
+        "mastery_range": [0.85, 0.95],
+        "review_after_days": 14,
+        "priority": "very_low",
+        "description": "Strong mastery - biweekly review"
+      },
+      {
+        "mastery_range": [0.95, 1.0],
+        "review_after_days": 21,
+        "priority": "minimal",
+        "description": "Excellent mastery - monthly review"
+      }
+    ],
+    "decay_acceleration_factors": {
+      "no_review_in_7_days": 1.5,
+      "no_review_in_14_days": 2.0,
+      "no_review_in_30_days": 3.0
+    }
+  },
+  "milestone_projects": [
+    {
+      "project_id": "PROJ_CALCULATOR",
+      "name": "Basic Calculator",
+      "required_mappings": ["UNIV_VAR", "UNIV_COND", "UNIV_FUNC"],
+      "language_id": "python_3",
+      "estimated_completion_minutes": 60,
+      "mastery_verification_weight": 1.3,
+      "difficulty": 0.4,
+      "description": "Build a simple calculator with basic operations"
+    },
+    {
+      "project_id": "PROJ_TODO_LIST",
+      "name": "Todo List Application",
+      "required_mappings": ["UNIV_VAR", "UNIV_COND", "UNIV_LOOP", "UNIV_FUNC", "UNIV_COLL"],
+      "language_id": "python_3",
+      "estimated_completion_minutes": 120,
+      "mastery_verification_weight": 1.5,
+      "difficulty": 0.6,
+      "description": "Create a todo list with add, remove, and list operations"
+    },
+    {
+      "project_id": "PROJ_CONTACT_MANAGER",
+      "name": "Contact Manager",
+      "required_mappings": ["UNIV_VAR", "UNIV_COND", "UNIV_LOOP", "UNIV_FUNC", "UNIV_COLL", "UNIV_OOP"],
+      "language_id": "python_3",
+      "estimated_completion_minutes": 180,
+      "mastery_verification_weight": 1.8,
+      "difficulty": 0.75,
+      "description": "Build an OOP-based contact management system"
+    },
+    {
+      "project_id": "PROJ_JS_DOM_MANIPULATOR",
+      "name": "Interactive Web Page",
+      "required_mappings": ["UNIV_VAR", "UNIV_COND", "UNIV_FUNC", "UNIV_COLL"],
+      "language_id": "javascript_es6",
+      "estimated_completion_minutes": 90,
+      "mastery_verification_weight": 1.4,
+      "difficulty": 0.55,
+      "description": "Create an interactive webpage with DOM manipulation"
+    },
+    {
+      "project_id": "PROJ_JAVA_STUDENT_SYSTEM",
+      "name": "Student Management System",
+      "required_mappings": ["UNIV_VAR", "UNIV_COND", "UNIV_LOOP", "UNIV_FUNC", "UNIV_COLL", "UNIV_OOP"],
+      "language_id": "java_17",
+      "estimated_completion_minutes": 200,
+      "mastery_verification_weight": 1.9,
+      "difficulty": 0.8,
+      "description": "Build a comprehensive student management system with classes and interfaces"
+    },
+    {
+      "project_id": "PROJ_CPP_MEMORY_GAME",
+      "name": "Memory Management Game",
+      "required_mappings": ["UNIV_VAR", "UNIV_COND", "UNIV_LOOP", "UNIV_FUNC", "UNIV_COLL"],
+      "language_id": "cpp_20",
+      "estimated_completion_minutes": 150,
+      "mastery_verification_weight": 1.7,
+      "difficulty": 0.85,
+      "description": "Create a game demonstrating proper memory management with pointers"
+    },
+    {
+      "project_id": "PROJ_GO_WEB_SERVER",
+      "name": "Simple Web Server",
+      "required_mappings": ["UNIV_VAR", "UNIV_FUNC", "UNIV_COLL", "UNIV_OOP"],
+      "language_id": "go_1_21",
+      "estimated_completion_minutes": 100,
+      "mastery_verification_weight": 1.6,
+      "difficulty": 0.7,
+      "description": "Build a basic HTTP server with routing"
+    }
+  ],
+  "error_pattern_taxonomy": [
+    {
+      "error_category": "SYNTAX_ERRORS",
+      "mapping_id": "UNIV_SYN_PREC",
+      "common_patterns": [
+        {
+          "error_type": "MISSING_SEMICOLON",
+          "applies_to_languages": ["javascript_es6", "java_17", "cpp_20"],
+          "severity": 0.3,
+          "remediation_boost": 0.08,
+          "common_message": "Missing semicolon at end of statement"
+        },
+        {
+          "error_type": "INDENTATION_ERROR",
+          "applies_to_languages": ["python_3"],
+          "severity": 0.5,
+          "remediation_boost": 0.12,
+          "common_message": "Incorrect indentation level"
+        },
+        {
+          "error_type": "BRACE_MISMATCH",
+          "applies_to_languages": ["javascript_es6", "java_17", "cpp_20", "go_1_21"],
+          "severity": 0.4,
+          "remediation_boost": 0.10,
+          "common_message": "Mismatched curly braces"
+        }
+      ]
+    },
+    {
+      "error_category": "TYPE_ERRORS",
+      "mapping_id": "UNIV_VAR",
+      "common_patterns": [
+        {
+          "error_type": "TYPE_MISMATCH",
+          "applies_to_languages": ["java_17", "cpp_20", "go_1_21"],
+          "severity": 0.7,
+          "remediation_boost": 0.15,
+          "common_message": "Cannot assign value of one type to variable of another type"
+        },
+        {
+          "error_type": "UNDEFINED_VARIABLE",
+          "applies_to_languages": ["python_3", "javascript_es6", "java_17", "cpp_20", "go_1_21"],
+          "severity": 0.6,
+          "remediation_boost": 0.12,
+          "common_message": "Variable used before declaration or initialization"
+        },
+        {
+          "error_type": "NULL_POINTER_EXCEPTION",
+          "applies_to_languages": ["java_17", "cpp_20"],
+          "severity": 0.8,
+          "remediation_boost": 0.18,
+          "common_message": "Attempting to access null/nullptr reference"
+        }
+      ]
+    },
+    {
+      "error_category": "LOGIC_ERRORS",
+      "mapping_id": "UNIV_COND",
+      "common_patterns": [
+        {
+          "error_type": "WRONG_COMPARISON_OPERATOR",
+          "applies_to_languages": ["python_3", "javascript_es6", "java_17", "cpp_20", "go_1_21"],
+          "severity": 0.5,
+          "remediation_boost": 0.10,
+          "common_message": "Using = instead of == or === for comparison"
+        },
+        {
+          "error_type": "BOOLEAN_LOGIC_ERROR",
+          "applies_to_languages": ["python_3", "javascript_es6", "java_17", "cpp_20", "go_1_21"],
+          "severity": 0.6,
+          "remediation_boost": 0.12,
+          "common_message": "Incorrect use of AND/OR operators"
+        }
+      ]
+    },
+    {
+      "error_category": "LOOP_ERRORS",
+      "mapping_id": "UNIV_LOOP",
+      "common_patterns": [
+        {
+          "error_type": "INFINITE_LOOP",
+          "applies_to_languages": ["python_3", "javascript_es6", "java_17", "cpp_20", "go_1_21"],
+          "severity": 0.9,
+          "remediation_boost": 0.20,
+          "common_message": "Loop condition never becomes false"
+        },
+        {
+          "error_type": "OFF_BY_ONE_ERROR",
+          "applies_to_languages": ["python_3", "javascript_es6", "java_17", "cpp_20", "go_1_21"],
+          "severity": 0.5,
+          "remediation_boost": 0.12,
+          "common_message": "Loop iterates one time too many or too few"
+        }
+      ]
+    },
+    {
+      "error_category": "FUNCTION_ERRORS",
+      "mapping_id": "UNIV_FUNC",
+      "common_patterns": [
+        {
+          "error_type": "SCOPE_MISUNDERSTANDING",
+          "applies_to_languages": ["python_3", "javascript_es6", "java_17", "cpp_20", "go_1_21"],
+          "severity": 0.7,
+          "remediation_boost": 0.15,
+          "common_message": "Accessing variables outside their scope"
+        },
+        {
+          "error_type": "MISSING_RETURN",
+          "applies_to_languages": ["python_3", "javascript_es6", "java_17", "cpp_20", "go_1_21"],
+          "severity": 0.6,
+          "remediation_boost": 0.12,
+          "common_message": "Function expected to return value but doesn't"
+        },
+        {
+          "error_type": "ARGUMENT_MISMATCH",
+          "applies_to_languages": ["python_3", "javascript_es6", "java_17", "cpp_20", "go_1_21"],
+          "severity": 0.5,
+          "remediation_boost": 0.10,
+          "common_message": "Wrong number or type of arguments passed to function"
+        }
+      ]
+    },
+    {
+      "error_category": "COLLECTION_ERRORS",
+      "mapping_id": "UNIV_COLL",
+      "common_patterns": [
+        {
+          "error_type": "INDEX_OUT_OF_BOUNDS",
+          "applies_to_languages": ["python_3", "javascript_es6", "java_17", "cpp_20", "go_1_21"],
+          "severity": 0.7,
+          "remediation_boost": 0.14,
+          "common_message": "Attempting to access array/list element beyond its size"
+        },
+        {
+          "error_type": "KEY_NOT_FOUND",
+          "applies_to_languages": ["python_3", "javascript_es6", "java_17", "go_1_21"],
+          "severity": 0.5,
+          "remediation_boost": 0.10,
+          "common_message": "Accessing dictionary/map with non-existent key"
+        }
+      ]
+    },
+    {
+      "error_category": "OOP_ERRORS",
+      "mapping_id": "UNIV_OOP",
+      "common_patterns": [
+        {
+          "error_type": "INHERITANCE_MISUSE",
+          "applies_to_languages": ["python_3", "javascript_es6", "java_17", "cpp_20"],
+          "severity": 0.8,
+          "remediation_boost": 0.18,
+          "common_message": "Incorrect use of inheritance or super/parent calls"
+        },
+        {
+          "error_type": "ENCAPSULATION_VIOLATION",
+          "applies_to_languages": ["java_17", "cpp_20"],
+          "severity": 0.6,
+          "remediation_boost": 0.12,
+          "common_message": "Accessing private members from outside the class"
+        },
+        {
+          "error_type": "CONSTRUCTOR_ERROR",
+          "applies_to_languages": ["python_3", "javascript_es6", "java_17", "cpp_20", "go_1_21"],
+          "severity": 0.7,
+          "remediation_boost": 0.15,
+          "common_message": "Incorrect constructor implementation or invocation"
+        }
+      ]
+    }
+  ],
+  "prerequisite_strength_weights": [
+    {
+      "target_mapping_id": "UNIV_OOP",
+      "weighted_prerequisites": [
+        { "prereq_mapping_id": "UNIV_VAR", "weight": 0.40, "min_mastery_required": 0.70 },
+        { "prereq_mapping_id": "UNIV_FUNC", "weight": 0.50, "min_mastery_required": 0.75 },
+        { "prereq_mapping_id": "UNIV_COLL", "weight": 0.30, "min_mastery_required": 0.65 }
+      ],
+      "aggregate_threshold": 0.70,
+      "description": "OOP requires strong understanding of variables, functions, and collections"
+    },
+    {
+      "target_mapping_id": "UNIV_FUNC",
+      "weighted_prerequisites": [
+        { "prereq_mapping_id": "UNIV_VAR", "weight": 0.60, "min_mastery_required": 0.65 },
+        { "prereq_mapping_id": "UNIV_COND", "weight": 0.50, "min_mastery_required": 0.60 },
+        { "prereq_mapping_id": "UNIV_LOOP", "weight": 0.40, "min_mastery_required": 0.60 }
+      ],
+      "aggregate_threshold": 0.65,
+      "description": "Functions build on variables, conditionals, and loops"
+    },
+    {
+      "target_mapping_id": "UNIV_COLL",
+      "weighted_prerequisites": [
+        { "prereq_mapping_id": "UNIV_VAR", "weight": 0.70, "min_mastery_required": 0.65 },
+        { "prereq_mapping_id": "UNIV_LOOP", "weight": 0.60, "min_mastery_required": 0.65 },
+        { "prereq_mapping_id": "UNIV_FUNC", "weight": 0.40, "min_mastery_required": 0.60 }
+      ],
+      "aggregate_threshold": 0.68,
+      "description": "Collections require solid grasp of types, iteration, and function usage"
+    },
+    {
+      "target_mapping_id": "UNIV_LOOP",
+      "weighted_prerequisites": [
+        { "prereq_mapping_id": "UNIV_VAR", "weight": 0.50, "min_mastery_required": 0.60 },
+        { "prereq_mapping_id": "UNIV_COND", "weight": 0.80, "min_mastery_required": 0.65 }
+      ],
+      "aggregate_threshold": 0.65,
+      "description": "Loops heavily depend on conditional logic understanding"
+    },
+    {
+      "target_mapping_id": "UNIV_COND",
+      "weighted_prerequisites": [
+        { "prereq_mapping_id": "UNIV_VAR", "weight": 0.75, "min_mastery_required": 0.60 }
+      ],
+      "aggregate_threshold": 0.60,
+      "description": "Conditionals require understanding of variables and boolean types"
+    }
+  ],
+  "concept_interdependencies": [
+    {
+      "mapping_id": "UNIV_LOOP",
+      "reinforces": [
+        { "target_mapping_id": "UNIV_COND", "strength": 0.80, "description": "Loop conditions reinforce boolean logic" },
+        { "target_mapping_id": "UNIV_VAR", "strength": 0.50, "description": "Loop counters reinforce variable manipulation" }
+      ],
+      "requires_understanding_of": [
+        { "source_mapping_id": "UNIV_COND", "minimum_mastery": 0.60, "description": "Must understand conditionals for loop termination" }
+      ]
+    },
+    {
+      "mapping_id": "UNIV_FUNC",
+      "reinforces": [
+        { "target_mapping_id": "UNIV_VAR", "strength": 0.70, "description": "Function parameters deepen variable understanding" },
+        { "target_mapping_id": "UNIV_LOOP", "strength": 0.60, "description": "Functions often contain loops" },
+        { "target_mapping_id": "UNIV_COND", "strength": 0.65, "description": "Functions often contain conditional logic" }
+      ],
+      "requires_understanding_of": [
+        { "source_mapping_id": "UNIV_VAR", "minimum_mastery": 0.65, "description": "Must understand variables for parameters and returns" }
+      ]
+    },
+    {
+      "mapping_id": "UNIV_COLL",
+      "reinforces": [
+        { "target_mapping_id": "UNIV_LOOP", "strength": 0.85, "description": "Iterating collections heavily reinforces loop concepts" },
+        { "target_mapping_id": "UNIV_VAR", "strength": 0.60, "description": "Collection elements reinforce type understanding" }
+      ],
+      "requires_understanding_of": [
+        { "source_mapping_id": "UNIV_VAR", "minimum_mastery": 0.65, "description": "Must understand types for collection usage" },
+        { "source_mapping_id": "UNIV_LOOP", "minimum_mastery": 0.65, "description": "Must understand loops to iterate collections" }
+      ]
+    },
+    {
+      "mapping_id": "UNIV_OOP",
+      "reinforces": [
+        { "target_mapping_id": "UNIV_FUNC", "strength": 0.75, "description": "Methods deepen function understanding" },
+        { "target_mapping_id": "UNIV_COLL", "strength": 0.55, "description": "Object state management reinforces collection usage" },
+        { "target_mapping_id": "UNIV_VAR", "strength": 0.60, "description": "Instance variables reinforce type understanding" }
+      ],
+      "requires_understanding_of": [
+        { "source_mapping_id": "UNIV_FUNC", "minimum_mastery": 0.70, "description": "Must understand functions for methods" },
+        { "source_mapping_id": "UNIV_VAR", "minimum_mastery": 0.70, "description": "Must understand variables for instance state" }
+      ]
+    }
+  ]
+}
