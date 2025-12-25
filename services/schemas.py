@@ -80,3 +80,29 @@ class StateVectorResponse(BaseModel):
     """RL-ready state representation (dynamic dimensions based on curriculum)."""
     state_vector: List[float] = Field(..., min_items=1)  # Dynamic size adapts to curriculum changes
     metadata: dict = Field(..., description="Human-readable state interpretation with prerequisites, transfer potential, and error patterns")
+
+
+class UserRegistrationPayload(BaseModel):
+    """New user registration request."""
+    email: str = Field(..., description="User email address")
+    password: str = Field(..., min_length=6, description="User password (will be hashed)")
+    language_id: Literal["python_3", "javascript_es6", "java_17", "cpp_20", "go_1_21"]
+    experience_level: Literal["beginner", "intermediate", "advanced"] = Field(
+        default="beginner",
+        description="Self-reported experience level for initial state priming"
+    )
+
+    @validator('email')
+    def validate_email(cls, v):
+        if '@' not in v or '.' not in v:
+            raise ValueError('Invalid email format')
+        return v.lower()
+
+
+class UserRegistrationResponse(BaseModel):
+    """Response after successful user registration."""
+    user_id: str
+    message: str
+    starting_topic: str = Field(..., description="Language-specific major_topic_id to start with")
+    experience_level: str
+

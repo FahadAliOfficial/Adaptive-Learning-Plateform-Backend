@@ -12,10 +12,13 @@ from services.schemas import (
     ExamSubmissionPayload, 
     MasteryUpdateResponse,
     StateVectorRequest,
-    StateVectorResponse
+    StateVectorResponse,
+    UserRegistrationPayload,
+    UserRegistrationResponse
 )
 from services.grading_service import GradingService
 from services.state_vector_service import StateVectorGenerator
+from services.user_service import UserService
 
 import os
 from dotenv import load_dotenv
@@ -123,6 +126,36 @@ async def health_check():
         "phase": "1",
         "version": "1.0"
     }
+
+
+@app.post("/api/user/register", response_model=UserRegistrationResponse)
+@limiter.limit("5/minute")  # Max 5 registrations per minute per IP
+async def register_user(
+    payload: UserRegistrationPayload,
+    db: Session = Depends(get_db)
+):
+    """
+    Register a new user and initialize their knowledge state.
+    
+    Experience levels:
+    - beginner: Starts from UNIV_SYN_LOGIC (topic 1)
+    - intermediate: Assumed mastery of topics 1-4, starts at UNIV_LOOP
+    - advanced: Assumed mastery of topics 1-7, starts at UNIV_OOP
+    """
+    try:
+        user_service = UserService(db)
+        return user_service.register_user(payload)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Registration failed: {str(e)}"
+        )
 
 
 # Example usage documentation

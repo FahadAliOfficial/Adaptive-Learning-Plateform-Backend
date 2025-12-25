@@ -7,6 +7,39 @@
     "maintenance_threshold": 0.65,
     "description": "Global configuration for knowledge retention and review mechanics"
   },
+  "experience_levels": {
+    "beginner": {
+      "starting_mapping_id": "UNIV_SYN_LOGIC",
+      "initial_mastery_estimate": 0.0,
+      "initial_difficulty_tier": "beginner",
+      "assumed_mastered": []
+    },
+    "intermediate": {
+      "starting_mapping_id": "UNIV_LOOP",
+      "initial_mastery_estimate": 0.65,
+      "initial_difficulty_tier": "beginner",
+      "assumed_mastered": [
+        "UNIV_SYN_LOGIC",
+        "UNIV_SYN_PREC",
+        "UNIV_VAR",
+        "UNIV_COND"
+      ]
+    },
+    "advanced": {
+      "starting_mapping_id": "UNIV_OOP",
+      "initial_mastery_estimate": 0.80,
+      "initial_difficulty_tier": "intermediate",
+      "assumed_mastered": [
+        "UNIV_SYN_LOGIC",
+        "UNIV_SYN_PREC",
+        "UNIV_VAR",
+        "UNIV_COND",
+        "UNIV_LOOP",
+        "UNIV_FUNC",
+        "UNIV_COLL"
+      ]
+    }
+  },
   "universal_transitions": [
     {
       "transition_id": "TRANS_SYN_LOGIC_TO_SYN_PREC",
@@ -356,7 +389,11 @@
     {
       "gate_id": "GATE_OOP_MASTERY",
       "mapping_id": "UNIV_OOP",
-      "prerequisite_mappings": ["UNIV_VAR", "UNIV_FUNC", "UNIV_COLL"],
+      "prerequisite_mappings": [
+        "UNIV_VAR",
+        "UNIV_FUNC",
+        "UNIV_COLL"
+      ],
       "ideal_mastery_score": 0.80,
       "minimum_allowable_score": 0.60,
       "penalty_steepness": 2.5,
@@ -365,7 +402,11 @@
     {
       "gate_id": "GATE_FUNC_MASTERY",
       "mapping_id": "UNIV_FUNC",
-      "prerequisite_mappings": ["UNIV_VAR", "UNIV_COND", "UNIV_LOOP"],
+      "prerequisite_mappings": [
+        "UNIV_VAR",
+        "UNIV_COND",
+        "UNIV_LOOP"
+      ],
       "ideal_mastery_score": 0.75,
       "minimum_allowable_score": 0.55,
       "penalty_steepness": 2.0,
@@ -374,7 +415,10 @@
     {
       "gate_id": "GATE_COLL_MASTERY",
       "mapping_id": "UNIV_COLL",
-      "prerequisite_mappings": ["UNIV_VAR", "UNIV_LOOP"],
+      "prerequisite_mappings": [
+        "UNIV_VAR",
+        "UNIV_LOOP"
+      ],
       "ideal_mastery_score": 0.75,
       "minimum_allowable_score": 0.58,
       "penalty_steepness": 2.2,
@@ -425,9 +469,21 @@
       "mapping_id": "UNIV_SYN_LOGIC",
       "language_id": "python_3",
       "tiers": {
-        "beginner": { "weight": 0.3, "min_mastery_to_unlock": 0.0, "target_accuracy": 0.7 },
-        "intermediate": { "weight": 0.6, "min_mastery_to_unlock": 0.5, "target_accuracy": 0.8 },
-        "advanced": { "weight": 0.9, "min_mastery_to_unlock": 0.75, "target_accuracy": 0.9 }
+        "beginner": {
+          "weight": 0.3,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.7
+        },
+        "intermediate": {
+          "weight": 0.6,
+          "min_mastery_to_unlock": 0.5,
+          "target_accuracy": 0.8
+        },
+        "advanced": {
+          "weight": 0.9,
+          "min_mastery_to_unlock": 0.75,
+          "target_accuracy": 0.9
+        }
       }
     },
     {
@@ -435,9 +491,21 @@
       "mapping_id": "UNIV_VAR",
       "language_id": "python_3",
       "tiers": {
-        "beginner": { "weight": 0.3, "min_mastery_to_unlock": 0.0, "target_accuracy": 0.7 },
-        "intermediate": { "weight": 0.6, "min_mastery_to_unlock": 0.55, "target_accuracy": 0.8 },
-        "advanced": { "weight": 0.9, "min_mastery_to_unlock": 0.75, "target_accuracy": 0.9 }
+        "beginner": {
+          "weight": 0.3,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.7
+        },
+        "intermediate": {
+          "weight": 0.6,
+          "min_mastery_to_unlock": 0.55,
+          "target_accuracy": 0.8
+        },
+        "advanced": {
+          "weight": 0.9,
+          "min_mastery_to_unlock": 0.75,
+          "target_accuracy": 0.9
+        }
       }
     },
     {
@@ -445,9 +513,21 @@
       "mapping_id": "UNIV_FUNC",
       "language_id": "python_3",
       "tiers": {
-        "beginner": { "weight": 0.4, "min_mastery_to_unlock": 0.0, "target_accuracy": 0.65 },
-        "intermediate": { "weight": 0.7, "min_mastery_to_unlock": 0.5, "target_accuracy": 0.75 },
-        "advanced": { "weight": 1.0, "min_mastery_to_unlock": 0.7, "target_accuracy": 0.85 }
+        "beginner": {
+          "weight": 0.4,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.65
+        },
+        "intermediate": {
+          "weight": 0.7,
+          "min_mastery_to_unlock": 0.5,
+          "target_accuracy": 0.75
+        },
+        "advanced": {
+          "weight": 1.0,
+          "min_mastery_to_unlock": 0.7,
+          "target_accuracy": 0.85
+        }
       }
     },
     {
@@ -455,63 +535,147 @@
       "mapping_id": "UNIV_OOP",
       "language_id": "python_3",
       "tiers": {
-        "beginner": { "weight": 0.5, "min_mastery_to_unlock": 0.0, "target_accuracy": 0.6 },
-        "intermediate": { "weight": 0.8, "min_mastery_to_unlock": 0.45, "target_accuracy": 0.75 },
-        "advanced": { "weight": 1.2, "min_mastery_to_unlock": 0.7, "target_accuracy": 0.85 }
+        "beginner": {
+          "weight": 0.5,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.6
+        },
+        "intermediate": {
+          "weight": 0.8,
+          "min_mastery_to_unlock": 0.45,
+          "target_accuracy": 0.75
+        },
+        "advanced": {
+          "weight": 1.2,
+          "min_mastery_to_unlock": 0.7,
+          "target_accuracy": 0.85
+        }
       }
     },
     {
       "mapping_id": "UNIV_VAR",
       "default_for_all_languages": true,
       "tiers": {
-        "beginner": { "weight": 0.3, "min_mastery_to_unlock": 0.0, "target_accuracy": 0.7 },
-        "intermediate": { "weight": 0.6, "min_mastery_to_unlock": 0.5, "target_accuracy": 0.8 },
-        "advanced": { "weight": 0.9, "min_mastery_to_unlock": 0.75, "target_accuracy": 0.9 }
+        "beginner": {
+          "weight": 0.3,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.7
+        },
+        "intermediate": {
+          "weight": 0.6,
+          "min_mastery_to_unlock": 0.5,
+          "target_accuracy": 0.8
+        },
+        "advanced": {
+          "weight": 0.9,
+          "min_mastery_to_unlock": 0.75,
+          "target_accuracy": 0.9
+        }
       }
     },
     {
       "mapping_id": "UNIV_COND",
       "default_for_all_languages": true,
       "tiers": {
-        "beginner": { "weight": 0.35, "min_mastery_to_unlock": 0.0, "target_accuracy": 0.7 },
-        "intermediate": { "weight": 0.65, "min_mastery_to_unlock": 0.5, "target_accuracy": 0.8 },
-        "advanced": { "weight": 0.95, "min_mastery_to_unlock": 0.75, "target_accuracy": 0.9 }
+        "beginner": {
+          "weight": 0.35,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.7
+        },
+        "intermediate": {
+          "weight": 0.65,
+          "min_mastery_to_unlock": 0.5,
+          "target_accuracy": 0.8
+        },
+        "advanced": {
+          "weight": 0.95,
+          "min_mastery_to_unlock": 0.75,
+          "target_accuracy": 0.9
+        }
       }
     },
     {
       "mapping_id": "UNIV_LOOP",
       "default_for_all_languages": true,
       "tiers": {
-        "beginner": { "weight": 0.4, "min_mastery_to_unlock": 0.0, "target_accuracy": 0.65 },
-        "intermediate": { "weight": 0.7, "min_mastery_to_unlock": 0.5, "target_accuracy": 0.75 },
-        "advanced": { "weight": 1.0, "min_mastery_to_unlock": 0.7, "target_accuracy": 0.85 }
+        "beginner": {
+          "weight": 0.4,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.65
+        },
+        "intermediate": {
+          "weight": 0.7,
+          "min_mastery_to_unlock": 0.5,
+          "target_accuracy": 0.75
+        },
+        "advanced": {
+          "weight": 1.0,
+          "min_mastery_to_unlock": 0.7,
+          "target_accuracy": 0.85
+        }
       }
     },
     {
       "mapping_id": "UNIV_FUNC",
       "default_for_all_languages": true,
       "tiers": {
-        "beginner": { "weight": 0.45, "min_mastery_to_unlock": 0.0, "target_accuracy": 0.65 },
-        "intermediate": { "weight": 0.75, "min_mastery_to_unlock": 0.5, "target_accuracy": 0.75 },
-        "advanced": { "weight": 1.1, "min_mastery_to_unlock": 0.7, "target_accuracy": 0.85 }
+        "beginner": {
+          "weight": 0.45,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.65
+        },
+        "intermediate": {
+          "weight": 0.75,
+          "min_mastery_to_unlock": 0.5,
+          "target_accuracy": 0.75
+        },
+        "advanced": {
+          "weight": 1.1,
+          "min_mastery_to_unlock": 0.7,
+          "target_accuracy": 0.85
+        }
       }
     },
     {
       "mapping_id": "UNIV_COLL",
       "default_for_all_languages": true,
       "tiers": {
-        "beginner": { "weight": 0.5, "min_mastery_to_unlock": 0.0, "target_accuracy": 0.65 },
-        "intermediate": { "weight": 0.8, "min_mastery_to_unlock": 0.5, "target_accuracy": 0.75 },
-        "advanced": { "weight": 1.1, "min_mastery_to_unlock": 0.7, "target_accuracy": 0.85 }
+        "beginner": {
+          "weight": 0.5,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.65
+        },
+        "intermediate": {
+          "weight": 0.8,
+          "min_mastery_to_unlock": 0.5,
+          "target_accuracy": 0.75
+        },
+        "advanced": {
+          "weight": 1.1,
+          "min_mastery_to_unlock": 0.7,
+          "target_accuracy": 0.85
+        }
       }
     },
     {
       "mapping_id": "UNIV_OOP",
       "default_for_all_languages": true,
       "tiers": {
-        "beginner": { "weight": 0.6, "min_mastery_to_unlock": 0.0, "target_accuracy": 0.6 },
-        "intermediate": { "weight": 0.9, "min_mastery_to_unlock": 0.45, "target_accuracy": 0.7 },
-        "advanced": { "weight": 1.3, "min_mastery_to_unlock": 0.7, "target_accuracy": 0.85 }
+        "beginner": {
+          "weight": 0.6,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.6
+        },
+        "intermediate": {
+          "weight": 0.9,
+          "min_mastery_to_unlock": 0.45,
+          "target_accuracy": 0.7
+        },
+        "advanced": {
+          "weight": 1.3,
+          "min_mastery_to_unlock": 0.7,
+          "target_accuracy": 0.85
+        }
       }
     }
   ],
@@ -523,31 +687,46 @@
     },
     "adjustment_rules": [
       {
-        "accuracy_range": [0.9, 1.0],
+        "accuracy_range": [
+          0.9,
+          1.0
+        ],
         "difficulty_multiplier": 1.3,
         "action": "increase_difficulty",
         "description": "High accuracy - challenge the learner more"
       },
       {
-        "accuracy_range": [0.75, 0.9],
+        "accuracy_range": [
+          0.75,
+          0.9
+        ],
         "difficulty_multiplier": 1.1,
         "action": "slight_increase",
         "description": "Good accuracy - gentle progression"
       },
       {
-        "accuracy_range": [0.6, 0.75],
+        "accuracy_range": [
+          0.6,
+          0.75
+        ],
         "difficulty_multiplier": 1.0,
         "action": "maintain",
         "description": "Adequate accuracy - maintain current level"
       },
       {
-        "accuracy_range": [0.4, 0.6],
+        "accuracy_range": [
+          0.4,
+          0.6
+        ],
         "difficulty_multiplier": 0.85,
         "action": "slight_decrease",
         "description": "Struggling - reduce difficulty"
       },
       {
-        "accuracy_range": [0.0, 0.4],
+        "accuracy_range": [
+          0.0,
+          0.4
+        ],
         "difficulty_multiplier": 0.7,
         "action": "decrease_difficulty",
         "description": "Very low accuracy - significant difficulty reduction and review prerequisites"
@@ -621,37 +800,55 @@
     "description": "Optimal review intervals based on current mastery level following spaced repetition principles",
     "intervals": [
       {
-        "mastery_range": [0.0, 0.4],
+        "mastery_range": [
+          0.0,
+          0.4
+        ],
         "review_after_days": 1,
         "priority": "critical",
         "description": "Very low mastery - review immediately"
       },
       {
-        "mastery_range": [0.4, 0.6],
+        "mastery_range": [
+          0.4,
+          0.6
+        ],
         "review_after_days": 2,
         "priority": "high",
         "description": "Below maintenance threshold - frequent review needed"
       },
       {
-        "mastery_range": [0.6, 0.75],
+        "mastery_range": [
+          0.6,
+          0.75
+        ],
         "review_after_days": 4,
         "priority": "medium",
         "description": "Approaching solid understanding - moderate review"
       },
       {
-        "mastery_range": [0.75, 0.85],
+        "mastery_range": [
+          0.75,
+          0.85
+        ],
         "review_after_days": 7,
         "priority": "low",
         "description": "Good mastery - weekly review"
       },
       {
-        "mastery_range": [0.85, 0.95],
+        "mastery_range": [
+          0.85,
+          0.95
+        ],
         "review_after_days": 14,
         "priority": "very_low",
         "description": "Strong mastery - biweekly review"
       },
       {
-        "mastery_range": [0.95, 1.0],
+        "mastery_range": [
+          0.95,
+          1.0
+        ],
         "review_after_days": 21,
         "priority": "minimal",
         "description": "Excellent mastery - monthly review"
@@ -667,7 +864,11 @@
     {
       "project_id": "PROJ_CALCULATOR",
       "name": "Basic Calculator",
-      "required_mappings": ["UNIV_VAR", "UNIV_COND", "UNIV_FUNC"],
+      "required_mappings": [
+        "UNIV_VAR",
+        "UNIV_COND",
+        "UNIV_FUNC"
+      ],
       "language_id": "python_3",
       "estimated_completion_minutes": 60,
       "mastery_verification_weight": 1.3,
@@ -677,7 +878,13 @@
     {
       "project_id": "PROJ_TODO_LIST",
       "name": "Todo List Application",
-      "required_mappings": ["UNIV_VAR", "UNIV_COND", "UNIV_LOOP", "UNIV_FUNC", "UNIV_COLL"],
+      "required_mappings": [
+        "UNIV_VAR",
+        "UNIV_COND",
+        "UNIV_LOOP",
+        "UNIV_FUNC",
+        "UNIV_COLL"
+      ],
       "language_id": "python_3",
       "estimated_completion_minutes": 120,
       "mastery_verification_weight": 1.5,
@@ -687,7 +894,14 @@
     {
       "project_id": "PROJ_CONTACT_MANAGER",
       "name": "Contact Manager",
-      "required_mappings": ["UNIV_VAR", "UNIV_COND", "UNIV_LOOP", "UNIV_FUNC", "UNIV_COLL", "UNIV_OOP"],
+      "required_mappings": [
+        "UNIV_VAR",
+        "UNIV_COND",
+        "UNIV_LOOP",
+        "UNIV_FUNC",
+        "UNIV_COLL",
+        "UNIV_OOP"
+      ],
       "language_id": "python_3",
       "estimated_completion_minutes": 180,
       "mastery_verification_weight": 1.8,
@@ -697,7 +911,12 @@
     {
       "project_id": "PROJ_JS_DOM_MANIPULATOR",
       "name": "Interactive Web Page",
-      "required_mappings": ["UNIV_VAR", "UNIV_COND", "UNIV_FUNC", "UNIV_COLL"],
+      "required_mappings": [
+        "UNIV_VAR",
+        "UNIV_COND",
+        "UNIV_FUNC",
+        "UNIV_COLL"
+      ],
       "language_id": "javascript_es6",
       "estimated_completion_minutes": 90,
       "mastery_verification_weight": 1.4,
@@ -707,7 +926,14 @@
     {
       "project_id": "PROJ_JAVA_STUDENT_SYSTEM",
       "name": "Student Management System",
-      "required_mappings": ["UNIV_VAR", "UNIV_COND", "UNIV_LOOP", "UNIV_FUNC", "UNIV_COLL", "UNIV_OOP"],
+      "required_mappings": [
+        "UNIV_VAR",
+        "UNIV_COND",
+        "UNIV_LOOP",
+        "UNIV_FUNC",
+        "UNIV_COLL",
+        "UNIV_OOP"
+      ],
       "language_id": "java_17",
       "estimated_completion_minutes": 200,
       "mastery_verification_weight": 1.9,
@@ -717,7 +943,13 @@
     {
       "project_id": "PROJ_CPP_MEMORY_GAME",
       "name": "Memory Management Game",
-      "required_mappings": ["UNIV_VAR", "UNIV_COND", "UNIV_LOOP", "UNIV_FUNC", "UNIV_COLL"],
+      "required_mappings": [
+        "UNIV_VAR",
+        "UNIV_COND",
+        "UNIV_LOOP",
+        "UNIV_FUNC",
+        "UNIV_COLL"
+      ],
       "language_id": "cpp_20",
       "estimated_completion_minutes": 150,
       "mastery_verification_weight": 1.7,
@@ -727,7 +959,12 @@
     {
       "project_id": "PROJ_GO_WEB_SERVER",
       "name": "Simple Web Server",
-      "required_mappings": ["UNIV_VAR", "UNIV_FUNC", "UNIV_COLL", "UNIV_OOP"],
+      "required_mappings": [
+        "UNIV_VAR",
+        "UNIV_FUNC",
+        "UNIV_COLL",
+        "UNIV_OOP"
+      ],
       "language_id": "go_1_21",
       "estimated_completion_minutes": 100,
       "mastery_verification_weight": 1.6,
@@ -742,21 +979,32 @@
       "common_patterns": [
         {
           "error_type": "MISSING_SEMICOLON",
-          "applies_to_languages": ["javascript_es6", "java_17", "cpp_20"],
+          "applies_to_languages": [
+            "javascript_es6",
+            "java_17",
+            "cpp_20"
+          ],
           "severity": 0.3,
           "remediation_boost": 0.08,
           "common_message": "Missing semicolon at end of statement"
         },
         {
           "error_type": "INDENTATION_ERROR",
-          "applies_to_languages": ["python_3"],
+          "applies_to_languages": [
+            "python_3"
+          ],
           "severity": 0.5,
           "remediation_boost": 0.12,
           "common_message": "Incorrect indentation level"
         },
         {
           "error_type": "BRACE_MISMATCH",
-          "applies_to_languages": ["javascript_es6", "java_17", "cpp_20", "go_1_21"],
+          "applies_to_languages": [
+            "javascript_es6",
+            "java_17",
+            "cpp_20",
+            "go_1_21"
+          ],
           "severity": 0.4,
           "remediation_boost": 0.10,
           "common_message": "Mismatched curly braces"
@@ -769,21 +1017,34 @@
       "common_patterns": [
         {
           "error_type": "TYPE_MISMATCH",
-          "applies_to_languages": ["java_17", "cpp_20", "go_1_21"],
+          "applies_to_languages": [
+            "java_17",
+            "cpp_20",
+            "go_1_21"
+          ],
           "severity": 0.7,
           "remediation_boost": 0.15,
           "common_message": "Cannot assign value of one type to variable of another type"
         },
         {
           "error_type": "UNDEFINED_VARIABLE",
-          "applies_to_languages": ["python_3", "javascript_es6", "java_17", "cpp_20", "go_1_21"],
+          "applies_to_languages": [
+            "python_3",
+            "javascript_es6",
+            "java_17",
+            "cpp_20",
+            "go_1_21"
+          ],
           "severity": 0.6,
           "remediation_boost": 0.12,
           "common_message": "Variable used before declaration or initialization"
         },
         {
           "error_type": "NULL_POINTER_EXCEPTION",
-          "applies_to_languages": ["java_17", "cpp_20"],
+          "applies_to_languages": [
+            "java_17",
+            "cpp_20"
+          ],
           "severity": 0.8,
           "remediation_boost": 0.18,
           "common_message": "Attempting to access null/nullptr reference"
@@ -796,14 +1057,26 @@
       "common_patterns": [
         {
           "error_type": "WRONG_COMPARISON_OPERATOR",
-          "applies_to_languages": ["python_3", "javascript_es6", "java_17", "cpp_20", "go_1_21"],
+          "applies_to_languages": [
+            "python_3",
+            "javascript_es6",
+            "java_17",
+            "cpp_20",
+            "go_1_21"
+          ],
           "severity": 0.5,
           "remediation_boost": 0.10,
           "common_message": "Using = instead of == or === for comparison"
         },
         {
           "error_type": "BOOLEAN_LOGIC_ERROR",
-          "applies_to_languages": ["python_3", "javascript_es6", "java_17", "cpp_20", "go_1_21"],
+          "applies_to_languages": [
+            "python_3",
+            "javascript_es6",
+            "java_17",
+            "cpp_20",
+            "go_1_21"
+          ],
           "severity": 0.6,
           "remediation_boost": 0.12,
           "common_message": "Incorrect use of AND/OR operators"
@@ -816,14 +1089,26 @@
       "common_patterns": [
         {
           "error_type": "INFINITE_LOOP",
-          "applies_to_languages": ["python_3", "javascript_es6", "java_17", "cpp_20", "go_1_21"],
+          "applies_to_languages": [
+            "python_3",
+            "javascript_es6",
+            "java_17",
+            "cpp_20",
+            "go_1_21"
+          ],
           "severity": 0.9,
           "remediation_boost": 0.20,
           "common_message": "Loop condition never becomes false"
         },
         {
           "error_type": "OFF_BY_ONE_ERROR",
-          "applies_to_languages": ["python_3", "javascript_es6", "java_17", "cpp_20", "go_1_21"],
+          "applies_to_languages": [
+            "python_3",
+            "javascript_es6",
+            "java_17",
+            "cpp_20",
+            "go_1_21"
+          ],
           "severity": 0.5,
           "remediation_boost": 0.12,
           "common_message": "Loop iterates one time too many or too few"
@@ -836,21 +1121,39 @@
       "common_patterns": [
         {
           "error_type": "SCOPE_MISUNDERSTANDING",
-          "applies_to_languages": ["python_3", "javascript_es6", "java_17", "cpp_20", "go_1_21"],
+          "applies_to_languages": [
+            "python_3",
+            "javascript_es6",
+            "java_17",
+            "cpp_20",
+            "go_1_21"
+          ],
           "severity": 0.7,
           "remediation_boost": 0.15,
           "common_message": "Accessing variables outside their scope"
         },
         {
           "error_type": "MISSING_RETURN",
-          "applies_to_languages": ["python_3", "javascript_es6", "java_17", "cpp_20", "go_1_21"],
+          "applies_to_languages": [
+            "python_3",
+            "javascript_es6",
+            "java_17",
+            "cpp_20",
+            "go_1_21"
+          ],
           "severity": 0.6,
           "remediation_boost": 0.12,
           "common_message": "Function expected to return value but doesn't"
         },
         {
           "error_type": "ARGUMENT_MISMATCH",
-          "applies_to_languages": ["python_3", "javascript_es6", "java_17", "cpp_20", "go_1_21"],
+          "applies_to_languages": [
+            "python_3",
+            "javascript_es6",
+            "java_17",
+            "cpp_20",
+            "go_1_21"
+          ],
           "severity": 0.5,
           "remediation_boost": 0.10,
           "common_message": "Wrong number or type of arguments passed to function"
@@ -863,14 +1166,25 @@
       "common_patterns": [
         {
           "error_type": "INDEX_OUT_OF_BOUNDS",
-          "applies_to_languages": ["python_3", "javascript_es6", "java_17", "cpp_20", "go_1_21"],
+          "applies_to_languages": [
+            "python_3",
+            "javascript_es6",
+            "java_17",
+            "cpp_20",
+            "go_1_21"
+          ],
           "severity": 0.7,
           "remediation_boost": 0.14,
           "common_message": "Attempting to access array/list element beyond its size"
         },
         {
           "error_type": "KEY_NOT_FOUND",
-          "applies_to_languages": ["python_3", "javascript_es6", "java_17", "go_1_21"],
+          "applies_to_languages": [
+            "python_3",
+            "javascript_es6",
+            "java_17",
+            "go_1_21"
+          ],
           "severity": 0.5,
           "remediation_boost": 0.10,
           "common_message": "Accessing dictionary/map with non-existent key"
@@ -883,21 +1197,35 @@
       "common_patterns": [
         {
           "error_type": "INHERITANCE_MISUSE",
-          "applies_to_languages": ["python_3", "javascript_es6", "java_17", "cpp_20"],
+          "applies_to_languages": [
+            "python_3",
+            "javascript_es6",
+            "java_17",
+            "cpp_20"
+          ],
           "severity": 0.8,
           "remediation_boost": 0.18,
           "common_message": "Incorrect use of inheritance or super/parent calls"
         },
         {
           "error_type": "ENCAPSULATION_VIOLATION",
-          "applies_to_languages": ["java_17", "cpp_20"],
+          "applies_to_languages": [
+            "java_17",
+            "cpp_20"
+          ],
           "severity": 0.6,
           "remediation_boost": 0.12,
           "common_message": "Accessing private members from outside the class"
         },
         {
           "error_type": "CONSTRUCTOR_ERROR",
-          "applies_to_languages": ["python_3", "javascript_es6", "java_17", "cpp_20", "go_1_21"],
+          "applies_to_languages": [
+            "python_3",
+            "javascript_es6",
+            "java_17",
+            "cpp_20",
+            "go_1_21"
+          ],
           "severity": 0.7,
           "remediation_boost": 0.15,
           "common_message": "Incorrect constructor implementation or invocation"
@@ -909,9 +1237,21 @@
     {
       "target_mapping_id": "UNIV_OOP",
       "weighted_prerequisites": [
-        { "prereq_mapping_id": "UNIV_VAR", "weight": 0.40, "min_mastery_required": 0.70 },
-        { "prereq_mapping_id": "UNIV_FUNC", "weight": 0.50, "min_mastery_required": 0.75 },
-        { "prereq_mapping_id": "UNIV_COLL", "weight": 0.30, "min_mastery_required": 0.65 }
+        {
+          "prereq_mapping_id": "UNIV_VAR",
+          "weight": 0.40,
+          "min_mastery_required": 0.70
+        },
+        {
+          "prereq_mapping_id": "UNIV_FUNC",
+          "weight": 0.50,
+          "min_mastery_required": 0.75
+        },
+        {
+          "prereq_mapping_id": "UNIV_COLL",
+          "weight": 0.30,
+          "min_mastery_required": 0.65
+        }
       ],
       "aggregate_threshold": 0.70,
       "description": "OOP requires strong understanding of variables, functions, and collections"
@@ -919,9 +1259,21 @@
     {
       "target_mapping_id": "UNIV_FUNC",
       "weighted_prerequisites": [
-        { "prereq_mapping_id": "UNIV_VAR", "weight": 0.60, "min_mastery_required": 0.65 },
-        { "prereq_mapping_id": "UNIV_COND", "weight": 0.50, "min_mastery_required": 0.60 },
-        { "prereq_mapping_id": "UNIV_LOOP", "weight": 0.40, "min_mastery_required": 0.60 }
+        {
+          "prereq_mapping_id": "UNIV_VAR",
+          "weight": 0.60,
+          "min_mastery_required": 0.65
+        },
+        {
+          "prereq_mapping_id": "UNIV_COND",
+          "weight": 0.50,
+          "min_mastery_required": 0.60
+        },
+        {
+          "prereq_mapping_id": "UNIV_LOOP",
+          "weight": 0.40,
+          "min_mastery_required": 0.60
+        }
       ],
       "aggregate_threshold": 0.65,
       "description": "Functions build on variables, conditionals, and loops"
@@ -929,9 +1281,21 @@
     {
       "target_mapping_id": "UNIV_COLL",
       "weighted_prerequisites": [
-        { "prereq_mapping_id": "UNIV_VAR", "weight": 0.70, "min_mastery_required": 0.65 },
-        { "prereq_mapping_id": "UNIV_LOOP", "weight": 0.60, "min_mastery_required": 0.65 },
-        { "prereq_mapping_id": "UNIV_FUNC", "weight": 0.40, "min_mastery_required": 0.60 }
+        {
+          "prereq_mapping_id": "UNIV_VAR",
+          "weight": 0.70,
+          "min_mastery_required": 0.65
+        },
+        {
+          "prereq_mapping_id": "UNIV_LOOP",
+          "weight": 0.60,
+          "min_mastery_required": 0.65
+        },
+        {
+          "prereq_mapping_id": "UNIV_FUNC",
+          "weight": 0.40,
+          "min_mastery_required": 0.60
+        }
       ],
       "aggregate_threshold": 0.68,
       "description": "Collections require solid grasp of types, iteration, and function usage"
@@ -939,8 +1303,16 @@
     {
       "target_mapping_id": "UNIV_LOOP",
       "weighted_prerequisites": [
-        { "prereq_mapping_id": "UNIV_VAR", "weight": 0.50, "min_mastery_required": 0.60 },
-        { "prereq_mapping_id": "UNIV_COND", "weight": 0.80, "min_mastery_required": 0.65 }
+        {
+          "prereq_mapping_id": "UNIV_VAR",
+          "weight": 0.50,
+          "min_mastery_required": 0.60
+        },
+        {
+          "prereq_mapping_id": "UNIV_COND",
+          "weight": 0.80,
+          "min_mastery_required": 0.65
+        }
       ],
       "aggregate_threshold": 0.65,
       "description": "Loops heavily depend on conditional logic understanding"
@@ -948,7 +1320,11 @@
     {
       "target_mapping_id": "UNIV_COND",
       "weighted_prerequisites": [
-        { "prereq_mapping_id": "UNIV_VAR", "weight": 0.75, "min_mastery_required": 0.60 }
+        {
+          "prereq_mapping_id": "UNIV_VAR",
+          "weight": 0.75,
+          "min_mastery_required": 0.60
+        }
       ],
       "aggregate_threshold": 0.60,
       "description": "Conditionals require understanding of variables and boolean types"
@@ -958,45 +1334,109 @@
     {
       "mapping_id": "UNIV_LOOP",
       "reinforces": [
-        { "target_mapping_id": "UNIV_COND", "strength": 0.80, "description": "Loop conditions reinforce boolean logic" },
-        { "target_mapping_id": "UNIV_VAR", "strength": 0.50, "description": "Loop counters reinforce variable manipulation" }
+        {
+          "target_mapping_id": "UNIV_COND",
+          "strength": 0.80,
+          "description": "Loop conditions reinforce boolean logic"
+        },
+        {
+          "target_mapping_id": "UNIV_VAR",
+          "strength": 0.50,
+          "description": "Loop counters reinforce variable manipulation"
+        }
       ],
       "requires_understanding_of": [
-        { "source_mapping_id": "UNIV_COND", "minimum_mastery": 0.60, "description": "Must understand conditionals for loop termination" }
+        {
+          "source_mapping_id": "UNIV_COND",
+          "minimum_mastery": 0.60,
+          "description": "Must understand conditionals for loop termination"
+        }
       ]
     },
     {
       "mapping_id": "UNIV_FUNC",
       "reinforces": [
-        { "target_mapping_id": "UNIV_VAR", "strength": 0.70, "description": "Function parameters deepen variable understanding" },
-        { "target_mapping_id": "UNIV_LOOP", "strength": 0.60, "description": "Functions often contain loops" },
-        { "target_mapping_id": "UNIV_COND", "strength": 0.65, "description": "Functions often contain conditional logic" }
+        {
+          "target_mapping_id": "UNIV_VAR",
+          "strength": 0.70,
+          "description": "Function parameters deepen variable understanding"
+        },
+        {
+          "target_mapping_id": "UNIV_LOOP",
+          "strength": 0.60,
+          "description": "Functions often contain loops"
+        },
+        {
+          "target_mapping_id": "UNIV_COND",
+          "strength": 0.65,
+          "description": "Functions often contain conditional logic"
+        }
       ],
       "requires_understanding_of": [
-        { "source_mapping_id": "UNIV_VAR", "minimum_mastery": 0.65, "description": "Must understand variables for parameters and returns" }
+        {
+          "source_mapping_id": "UNIV_VAR",
+          "minimum_mastery": 0.65,
+          "description": "Must understand variables for parameters and returns"
+        }
       ]
     },
     {
       "mapping_id": "UNIV_COLL",
       "reinforces": [
-        { "target_mapping_id": "UNIV_LOOP", "strength": 0.85, "description": "Iterating collections heavily reinforces loop concepts" },
-        { "target_mapping_id": "UNIV_VAR", "strength": 0.60, "description": "Collection elements reinforce type understanding" }
+        {
+          "target_mapping_id": "UNIV_LOOP",
+          "strength": 0.85,
+          "description": "Iterating collections heavily reinforces loop concepts"
+        },
+        {
+          "target_mapping_id": "UNIV_VAR",
+          "strength": 0.60,
+          "description": "Collection elements reinforce type understanding"
+        }
       ],
       "requires_understanding_of": [
-        { "source_mapping_id": "UNIV_VAR", "minimum_mastery": 0.65, "description": "Must understand types for collection usage" },
-        { "source_mapping_id": "UNIV_LOOP", "minimum_mastery": 0.65, "description": "Must understand loops to iterate collections" }
+        {
+          "source_mapping_id": "UNIV_VAR",
+          "minimum_mastery": 0.65,
+          "description": "Must understand types for collection usage"
+        },
+        {
+          "source_mapping_id": "UNIV_LOOP",
+          "minimum_mastery": 0.65,
+          "description": "Must understand loops to iterate collections"
+        }
       ]
     },
     {
       "mapping_id": "UNIV_OOP",
       "reinforces": [
-        { "target_mapping_id": "UNIV_FUNC", "strength": 0.75, "description": "Methods deepen function understanding" },
-        { "target_mapping_id": "UNIV_COLL", "strength": 0.55, "description": "Object state management reinforces collection usage" },
-        { "target_mapping_id": "UNIV_VAR", "strength": 0.60, "description": "Instance variables reinforce type understanding" }
+        {
+          "target_mapping_id": "UNIV_FUNC",
+          "strength": 0.75,
+          "description": "Methods deepen function understanding"
+        },
+        {
+          "target_mapping_id": "UNIV_COLL",
+          "strength": 0.55,
+          "description": "Object state management reinforces collection usage"
+        },
+        {
+          "target_mapping_id": "UNIV_VAR",
+          "strength": 0.60,
+          "description": "Instance variables reinforce type understanding"
+        }
       ],
       "requires_understanding_of": [
-        { "source_mapping_id": "UNIV_FUNC", "minimum_mastery": 0.70, "description": "Must understand functions for methods" },
-        { "source_mapping_id": "UNIV_VAR", "minimum_mastery": 0.70, "description": "Must understand variables for instance state" }
+        {
+          "source_mapping_id": "UNIV_FUNC",
+          "minimum_mastery": 0.70,
+          "description": "Must understand functions for methods"
+        },
+        {
+          "source_mapping_id": "UNIV_VAR",
+          "minimum_mastery": 0.70,
+          "description": "Must understand variables for instance state"
+        }
       ]
     }
   ]

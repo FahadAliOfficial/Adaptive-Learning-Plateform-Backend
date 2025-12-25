@@ -111,6 +111,19 @@ class CurriculumConfig:
     def get_maintenance_threshold(self) -> float:
         """Get minimum mastery before review needed."""
         return self.transition_map['config']['maintenance_threshold']
+    
+    def get_experience_config(self, level: str) -> Dict[str, Any]:
+        """Get starting configuration for experience level."""
+        experience_levels = self.transition_map.get('experience_levels', {})
+        # Defaults to beginner if invalid level passed
+        return experience_levels.get(level, experience_levels.get('beginner', {}))
+    
+    def get_major_topic_id(self, language_id: str, mapping_id: str) -> str:
+        """Convert universal mapping to language-specific major_topic_id."""
+        topic_info = self.mapping_to_topics.get(mapping_id, {}).get(language_id)
+        if topic_info:
+            return topic_info['major_topic_id']
+        raise ValueError(f"No major_topic_id found for {mapping_id} in {language_id}")
 
 
 # Singleton instance
