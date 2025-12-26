@@ -144,6 +144,10 @@ class StateVectorGenerator:
         for row in rows:
             mapping_id, score, last_date = row
             
+            # Parse datetime if it's a string (SQLite compatibility)
+            if isinstance(last_date, str):
+                last_date = datetime.fromisoformat(last_date.replace('Z', '+00:00'))
+            
             # Calculate days passed
             if last_date.tzinfo is None:
                 last_date = last_date.replace(tzinfo=timezone.utc)
@@ -209,6 +213,11 @@ class StateVectorGenerator:
             last_accuracy = last_session[0]
             last_difficulty = last_session[1]
             last_date = last_session[3]
+            
+            # Parse datetime if it's a string (SQLite compatibility)
+            if isinstance(last_date, str):
+                last_date = datetime.fromisoformat(last_date.replace('Z', '+00:00'))
+            
             if last_date.tzinfo is None:
                 last_date = last_date.replace(tzinfo=timezone.utc)
             days_inactive = (datetime.now(timezone.utc) - last_date).days
@@ -295,17 +304,19 @@ class StateVectorGenerator:
                 weights = [1.0] * len(prereqs)
             
             # Fetch mastery scores for each prerequisite
-            query = text("""
+            # Build IN clause dynamically for SQLite compatibility
+            placeholders = ','.join([f':p{i}' for i in range(len(prereqs))])
+            query = text(f"""
                 SELECT mapping_id, mastery_score
                 FROM student_state 
-                WHERE user_id=:u AND language_id=:l AND mapping_id IN :prereqs
+                WHERE user_id=:u AND language_id=:l AND mapping_id IN ({placeholders})
             """)
             
-            prereq_scores = dict(self.db.execute(query, {
-                "u": user_id,
-                "l": language_id,
-                "prereqs": tuple(prereqs)  # Use tuple for IN clause (SQL injection safe)
-            }).fetchall())
+            params = {"u": user_id, "l": language_id}
+            for i, mapping in enumerate(prereqs):
+                params[f'p{i}'] = mapping
+            
+            prereq_scores = dict(self.db.execute(query, params).fetchall())
             
             # Calculate weighted average
             weighted_sum = 0.0
@@ -370,6 +381,7 @@ class StateVectorGenerator:
             "needs_review": needs_review,
             "overall_mastery_avg": round(np.mean([s for _, s in topic_strengths if s > 0]), 3) if topic_strengths else 0.0,
             "last_session_accuracy": round(vector[self.behavioral_offset + 0], 3),
+            "average_fluency_ratio": round(vector[self.behavioral_offset + 2], 2),  # NEW: Expose fluency in metadata
             "stability_score": round(vector[self.behavioral_offset + 3], 3),
             "days_since_practice": int(vector[self.behavioral_offset + 4]),
             "gate_readiness": round(vector[self.behavioral_offset + 5], 3),
