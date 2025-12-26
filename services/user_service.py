@@ -72,9 +72,9 @@ class UserService:
         for mapping_id in assumed_mastered:
             insert_state = text("""
                 INSERT INTO student_state 
-                    (user_id, mapping_id, language_id, mastery_score, fluency_score, confidence_score, last_practiced_at)
+                    (user_id, mapping_id, language_id, mastery_score, fluency_score, confidence_score, last_practiced_at, last_updated)
                 VALUES 
-                    (:user_id, :mapping_id, :language_id, :mastery, :fluency, :confidence, NOW())
+                    (:user_id, :mapping_id, :language_id, :mastery, :fluency, :confidence, NOW(), NOW())
             """)
             
             self.db.execute(insert_state, {

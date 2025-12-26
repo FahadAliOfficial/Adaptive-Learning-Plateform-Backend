@@ -24,15 +24,17 @@ class StateVectorGenerator:
     [mastery_offset : mastery_offset+8]   Mastery Scores with Decay
     [fluency_offset : fluency_offset+8]   Fluency Scores
     [confidence_offset : confidence_offset+8] Confidence Scores
-    [behavioral_offset : behavioral_offset+6] Behavioral Metrics:
+    [behavioral_offset : behavioral_offset+8] Behavioral Metrics:
         [0] Last Session Accuracy
         [1] Last Session Difficulty
         [2] Average Fluency Ratio
         [3] Mastery Stability (Std Dev)
         [4] Days Since Last Practice
         [5] Soft Gate Readiness
+        [6] Session Confidence (Cold-Start Signal: smooth 0→1 based on total exams)
+        [7] Performance Velocity (Fast Learner Detection: 1.0 if high accuracy + fluency + difficulty)
     
-    Formula: vector_size = num_languages + (num_mappings × 3) + 6
+    Formula: vector_size = num_languages + (num_mappings × 3) + 8
     All indices calculated dynamically - NO hardcoded positions!
     
     Additional metadata includes:
@@ -55,8 +57,8 @@ class StateVectorGenerator:
         self.lambda_decay = self.config.get_decay_rate()
         
         # Vector dimension calculation (DYNAMIC - adapts to curriculum changes!)
-        # Structure: language_onehot + (mappings × 3 scores) + 6 behavioral metrics
-        self.vector_size = len(self.languages_order) + (len(self.mappings_order) * 3) + 6
+        # Structure: language_onehot + (mappings × 3 scores) + 8 behavioral metrics (includes cold-start signals)
+        self.vector_size = len(self.languages_order) + (len(self.mappings_order) * 3) + 8
         
         # Calculate index offsets dynamically (prevents corruption on curriculum changes!)
         self.lang_offset = 0
@@ -102,7 +104,7 @@ class StateVectorGenerator:
         for i, mapping_id in enumerate(self.mappings_order):
             vector[self.confidence_offset + i] = confidence_map.get(mapping_id, 0.0)
         
-        # 5. Behavioral Metrics [behavioral_offset : behavioral_offset + 6]
+        # 5. Behavioral Metrics [behavioral_offset : behavioral_offset + 8] (includes cold-start signals)
         metrics = self._get_behavioral_metrics(user_id, language_id)
         vector[self.behavioral_offset + 0] = metrics['last_accuracy']
         vector[self.behavioral_offset + 1] = metrics['last_difficulty']
@@ -110,6 +112,8 @@ class StateVectorGenerator:
         vector[self.behavioral_offset + 3] = metrics['stability']
         vector[self.behavioral_offset + 4] = metrics['days_inactive']
         vector[self.behavioral_offset + 5] = metrics['gate_readiness']
+        vector[self.behavioral_offset + 6] = metrics['session_confidence']  # NEW: Cold-start signal
+        vector[self.behavioral_offset + 7] = metrics['performance_velocity']  # NEW: Fast learner detection
         
         # 6. Generate rich metadata (prerequisites, transfer potential, errors)
         metadata = self._generate_metadata(vector, user_id, language_id, mastery_map)
@@ -186,6 +190,8 @@ class StateVectorGenerator:
         - stability: Inverse of score variance (high = consistent performance)
         - days_inactive: Days since last practice in this language
         - gate_readiness: % of soft gate prerequisites met
+        - session_confidence: Cold-start signal (0.0 = new user, 1.0 = experienced)
+        - performance_velocity: Fast learner detection (1.0 if high accuracy + fluency + difficulty)
         """
         
         # Last session stats
@@ -238,13 +244,32 @@ class StateVectorGenerator:
         # Gate readiness (average mastery of topics with gates)
         gate_readiness = self._calculate_gate_readiness(user_id, language_id)
         
+        # COLD-START SIGNALS: Fetch total exams taken (O(1) counter, not COUNT(*))
+        total_exams_query = text("""
+            SELECT total_exams_taken 
+            FROM users 
+            WHERE id = :u
+        """)
+        total_exams = self.db.execute(total_exams_query, {"u": user_id}).scalar() or 0
+        
+        # Session Confidence: Smooth decay (avoids binary cliff at session 3)
+        # Formula: 1 - 1/(n+1) → 0 exams=0.0, 1 exam=0.5, 9 exams=0.9, 99 exams=0.99
+        session_confidence = 1.0 - (1.0 / (total_exams + 1))
+        
+        # Performance Velocity: Detect if last session was high-velocity
+        # (Will be recalculated in real-time during next exam processing)
+        is_high_velocity = (last_accuracy > 0.9 and last_difficulty > 0.6)
+        performance_velocity = 1.0 if is_high_velocity else 0.0
+        
         return {
             'last_accuracy': round(last_accuracy, 3),
             'last_difficulty': round(last_difficulty, 3),
             'avg_fluency': round(avg_fluency, 2),
             'stability': round(stability, 3),
             'days_inactive': min(days_inactive, 30),  # Cap for normalization
-            'gate_readiness': round(gate_readiness, 3)
+            'gate_readiness': round(gate_readiness, 3),
+            'session_confidence': round(session_confidence, 3),  # NEW: Cold-start signal
+            'performance_velocity': round(performance_velocity, 1)  # NEW: Fast learner flag
         }
     
     def _calculate_gate_readiness(self, user_id: str, language_id: str) -> float:
@@ -348,10 +373,12 @@ class StateVectorGenerator:
             "stability_score": round(vector[self.behavioral_offset + 3], 3),
             "days_since_practice": int(vector[self.behavioral_offset + 4]),
             "gate_readiness": round(vector[self.behavioral_offset + 5], 3),
-            "prerequisites_status": prereq_status,  # NEW
-            "transfer_potential": transfer_potential,  # NEW
-            "recent_error_patterns": error_patterns,  # NEW
-            "state_vector_version": "2.0",
+            "session_confidence": round(vector[self.behavioral_offset + 6], 3),  # Cold-start signal
+            "performance_velocity": round(vector[self.behavioral_offset + 7], 1),  # Fast learner flag
+            "prerequisites_status": prereq_status,
+            "transfer_potential": transfer_potential,
+            "recent_error_patterns": error_patterns,
+            "state_vector_version": "3.0",  # Updated version with cold-start support
             "vector_dimensions": len(vector)
         }
     

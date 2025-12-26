@@ -113,13 +113,16 @@ class GradingService:
                 new_mastery
             )
             
-            # 7. Store Session History
+            # 7. Increment User's Total Exam Counter (for cold-start confidence signal)
+            self._increment_exam_counter(payload.user_id)
+            
+            # 8. Store Session History
             session_id = self._save_session_history(payload, accuracy, avg_difficulty, fluency_ratio)
             
-            # 8. Save Detailed Questions Snapshot with error tracking
+            # 9. Save Detailed Questions Snapshot with error tracking
             self._save_exam_details(session_id, payload.results)
             
-            # 9. Generate Recommendations (includes difficulty tier suggestion)
+            # 10. Generate Recommendations (includes difficulty tier suggestion)
             recommendations = self._generate_recommendations(
                 payload.user_id,
                 payload.language_id,
@@ -194,8 +197,19 @@ class GradingService:
                 penalty_factor = 0.6  # Fallback if no steepness defined
             performance *= penalty_factor
         
-        # EMA Update
-        new_mastery = (old_mastery * self.retention_weight) + (performance * self.innovation_weight)
+        # Detect Performance Velocity (high performers who should accelerate)
+        is_high_velocity = (accuracy > 0.9 and fluency > 1.2 and difficulty > 0.6)
+        
+        # EMA Update with adaptive weights for fast learners
+        if is_high_velocity:
+            # Accelerate learning for high performers (reduce retention, increase innovation)
+            retention = 0.5  # Less weight on old scores
+            innovation = 0.5  # More weight on new performance
+        else:
+            retention = self.retention_weight  # Standard 0.7
+            innovation = self.innovation_weight  # Standard 0.3
+        
+        new_mastery = (old_mastery * retention) + (performance * innovation)
         
         # Apply error remediation bonus (reward for fixing previous mistakes)
         if results:
@@ -218,14 +232,15 @@ class GradingService:
         # SQL Upsert
         upsert = text("""
             INSERT INTO student_state 
-                (user_id, mapping_id, language_id, mastery_score, fluency_score, confidence_score, last_practiced_at)
-            VALUES (:u, :m, :l, :ms, :fs, :cs, NOW())
+                (user_id, mapping_id, language_id, mastery_score, fluency_score, confidence_score, last_practiced_at, last_updated)
+            VALUES (:u, :m, :l, :ms, :fs, :cs, NOW(), NOW())
             ON CONFLICT (user_id, mapping_id, language_id) 
             DO UPDATE SET 
                 mastery_score = EXCLUDED.mastery_score,
                 fluency_score = EXCLUDED.fluency_score,
                 confidence_score = EXCLUDED.confidence_score,
-                last_practiced_at = EXCLUDED.last_practiced_at
+                last_practiced_at = EXCLUDED.last_practiced_at,
+                last_updated = EXCLUDED.last_updated
         """)
         
         self.db.execute(upsert, {
@@ -454,6 +469,19 @@ class GradingService:
                 applied.append(f"{mapping_id} from {source_lang} (+{boost:.2f})")
         
         return applied
+    
+    def _increment_exam_counter(self, user_id: str):
+        """
+        Atomically increment user's total exam counter.
+        Used for cold-start confidence signals (avoids expensive COUNT(*) queries).
+        """
+        update_query = text("""
+            UPDATE users 
+            SET total_exams_taken = total_exams_taken + 1
+            WHERE id = :user_id
+        """)
+        
+        self.db.execute(update_query, {"user_id": user_id})
     
     def _check_soft_gates(self, user_id: str, language_id: str, mapping_id: str) -> List[str]:
         """
