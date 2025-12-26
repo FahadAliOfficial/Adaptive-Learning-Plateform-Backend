@@ -553,6 +553,710 @@
       }
     },
     {
+      "major_topic_id": "JS_SYN_LOGIC",
+      "mapping_id": "UNIV_SYN_LOGIC",
+      "language_id": "javascript_es6",
+      "tiers": {
+        "beginner": {
+          "weight": 0.32,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.7
+        },
+        "intermediate": {
+          "weight": 0.62,
+          "min_mastery_to_unlock": 0.5,
+          "target_accuracy": 0.8
+        },
+        "advanced": {
+          "weight": 0.92,
+          "min_mastery_to_unlock": 0.75,
+          "target_accuracy": 0.9
+        }
+      }
+    },
+    {
+      "major_topic_id": "JS_SYN_PREC",
+      "mapping_id": "UNIV_SYN_PREC",
+      "language_id": "javascript_es6",
+      "tiers": {
+        "beginner": {
+          "weight": 0.34,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.68
+        },
+        "intermediate": {
+          "weight": 0.64,
+          "min_mastery_to_unlock": 0.5,
+          "target_accuracy": 0.78
+        },
+        "advanced": {
+          "weight": 0.94,
+          "min_mastery_to_unlock": 0.75,
+          "target_accuracy": 0.88
+        }
+      }
+    },
+    {
+      "major_topic_id": "JS_VAR_01",
+      "mapping_id": "UNIV_VAR",
+      "language_id": "javascript_es6",
+      "tiers": {
+        "beginner": {
+          "weight": 0.35,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.68
+        },
+        "intermediate": {
+          "weight": 0.65,
+          "min_mastery_to_unlock": 0.52,
+          "target_accuracy": 0.78
+        },
+        "advanced": {
+          "weight": 0.95,
+          "min_mastery_to_unlock": 0.75,
+          "target_accuracy": 0.88
+        }
+      }
+    },
+    {
+      "major_topic_id": "JS_COND_01",
+      "mapping_id": "UNIV_COND",
+      "language_id": "javascript_es6",
+      "tiers": {
+        "beginner": {
+          "weight": 0.38,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.68
+        },
+        "intermediate": {
+          "weight": 0.68,
+          "min_mastery_to_unlock": 0.5,
+          "target_accuracy": 0.78
+        },
+        "advanced": {
+          "weight": 0.98,
+          "min_mastery_to_unlock": 0.75,
+          "target_accuracy": 0.88
+        }
+      }
+    },
+    {
+      "major_topic_id": "JS_LOOP_01",
+      "mapping_id": "UNIV_LOOP",
+      "language_id": "javascript_es6",
+      "tiers": {
+        "beginner": {
+          "weight": 0.42,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.65
+        },
+        "intermediate": {
+          "weight": 0.72,
+          "min_mastery_to_unlock": 0.52,
+          "target_accuracy": 0.78
+        },
+        "advanced": {
+          "weight": 1.02,
+          "min_mastery_to_unlock": 0.75,
+          "target_accuracy": 0.88
+        }
+      }
+    },
+    {
+      "major_topic_id": "JS_FUNC_01",
+      "mapping_id": "UNIV_FUNC",
+      "language_id": "javascript_es6",
+      "tiers": {
+        "beginner": {
+          "weight": 0.5,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.62
+        },
+        "intermediate": {
+          "weight": 0.85,
+          "min_mastery_to_unlock": 0.48,
+          "target_accuracy": 0.72
+        },
+        "advanced": {
+          "weight": 1.25,
+          "min_mastery_to_unlock": 0.7,
+          "target_accuracy": 0.82
+        }
+      }
+    },
+    {
+      "major_topic_id": "JS_COLL_01",
+      "mapping_id": "UNIV_COLL",
+      "language_id": "javascript_es6",
+      "tiers": {
+        "beginner": {
+          "weight": 0.48,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.62
+        },
+        "intermediate": {
+          "weight": 0.82,
+          "min_mastery_to_unlock": 0.5,
+          "target_accuracy": 0.75
+        },
+        "advanced": {
+          "weight": 1.15,
+          "min_mastery_to_unlock": 0.72,
+          "target_accuracy": 0.85
+        }
+      }
+    },
+    {
+      "major_topic_id": "JS_OOP_01",
+      "mapping_id": "UNIV_OOP",
+      "language_id": "javascript_es6",
+      "tiers": {
+        "beginner": {
+          "weight": 0.55,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.58
+        },
+        "intermediate": {
+          "weight": 0.88,
+          "min_mastery_to_unlock": 0.42,
+          "target_accuracy": 0.72
+        },
+        "advanced": {
+          "weight": 1.3,
+          "min_mastery_to_unlock": 0.68,
+          "target_accuracy": 0.82
+        }
+      }
+    },
+    {
+      "major_topic_id": "JV_SYN_LOGIC",
+      "mapping_id": "UNIV_SYN_LOGIC",
+      "language_id": "java_17",
+      "tiers": {
+        "beginner": {
+          "weight": 0.38,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.65
+        },
+        "intermediate": {
+          "weight": 0.68,
+          "min_mastery_to_unlock": 0.5,
+          "target_accuracy": 0.75
+        },
+        "advanced": {
+          "weight": 0.98,
+          "min_mastery_to_unlock": 0.75,
+          "target_accuracy": 0.85
+        }
+      }
+    },
+    {
+      "major_topic_id": "JV_SYN_PREC",
+      "mapping_id": "UNIV_SYN_PREC",
+      "language_id": "java_17",
+      "tiers": {
+        "beginner": {
+          "weight": 0.42,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.62
+        },
+        "intermediate": {
+          "weight": 0.72,
+          "min_mastery_to_unlock": 0.5,
+          "target_accuracy": 0.75
+        },
+        "advanced": {
+          "weight": 1.02,
+          "min_mastery_to_unlock": 0.75,
+          "target_accuracy": 0.85
+        }
+      }
+    },
+    {
+      "major_topic_id": "JV_VAR_01",
+      "mapping_id": "UNIV_VAR",
+      "language_id": "java_17",
+      "tiers": {
+        "beginner": {
+          "weight": 0.45,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.62
+        },
+        "intermediate": {
+          "weight": 0.75,
+          "min_mastery_to_unlock": 0.52,
+          "target_accuracy": 0.75
+        },
+        "advanced": {
+          "weight": 1.05,
+          "min_mastery_to_unlock": 0.75,
+          "target_accuracy": 0.85
+        }
+      }
+    },
+    {
+      "major_topic_id": "JV_COND_01",
+      "mapping_id": "UNIV_COND",
+      "language_id": "java_17",
+      "tiers": {
+        "beginner": {
+          "weight": 0.42,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.65
+        },
+        "intermediate": {
+          "weight": 0.72,
+          "min_mastery_to_unlock": 0.5,
+          "target_accuracy": 0.75
+        },
+        "advanced": {
+          "weight": 1.02,
+          "min_mastery_to_unlock": 0.75,
+          "target_accuracy": 0.85
+        }
+      }
+    },
+    {
+      "major_topic_id": "JV_LOOP_01",
+      "mapping_id": "UNIV_LOOP",
+      "language_id": "java_17",
+      "tiers": {
+        "beginner": {
+          "weight": 0.48,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.62
+        },
+        "intermediate": {
+          "weight": 0.78,
+          "min_mastery_to_unlock": 0.52,
+          "target_accuracy": 0.75
+        },
+        "advanced": {
+          "weight": 1.08,
+          "min_mastery_to_unlock": 0.75,
+          "target_accuracy": 0.85
+        }
+      }
+    },
+    {
+      "major_topic_id": "JV_FUNC_01",
+      "mapping_id": "UNIV_FUNC",
+      "language_id": "java_17",
+      "tiers": {
+        "beginner": {
+          "weight": 0.52,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.6
+        },
+        "intermediate": {
+          "weight": 0.82,
+          "min_mastery_to_unlock": 0.48,
+          "target_accuracy": 0.72
+        },
+        "advanced": {
+          "weight": 1.15,
+          "min_mastery_to_unlock": 0.7,
+          "target_accuracy": 0.82
+        }
+      }
+    },
+    {
+      "major_topic_id": "JV_COLL_01",
+      "mapping_id": "UNIV_COLL",
+      "language_id": "java_17",
+      "tiers": {
+        "beginner": {
+          "weight": 0.58,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.58
+        },
+        "intermediate": {
+          "weight": 0.88,
+          "min_mastery_to_unlock": 0.48,
+          "target_accuracy": 0.7
+        },
+        "advanced": {
+          "weight": 1.25,
+          "min_mastery_to_unlock": 0.7,
+          "target_accuracy": 0.8
+        }
+      }
+    },
+    {
+      "major_topic_id": "JV_OOP_01",
+      "mapping_id": "UNIV_OOP",
+      "language_id": "java_17",
+      "tiers": {
+        "beginner": {
+          "weight": 0.65,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.55
+        },
+        "intermediate": {
+          "weight": 0.95,
+          "min_mastery_to_unlock": 0.4,
+          "target_accuracy": 0.7
+        },
+        "advanced": {
+          "weight": 1.35,
+          "min_mastery_to_unlock": 0.65,
+          "target_accuracy": 0.8
+        }
+      }
+    },
+    {
+      "major_topic_id": "CPP_SYN_LOGIC",
+      "mapping_id": "UNIV_SYN_LOGIC",
+      "language_id": "cpp_20",
+      "tiers": {
+        "beginner": {
+          "weight": 0.48,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.6
+        },
+        "intermediate": {
+          "weight": 0.78,
+          "min_mastery_to_unlock": 0.5,
+          "target_accuracy": 0.7
+        },
+        "advanced": {
+          "weight": 1.08,
+          "min_mastery_to_unlock": 0.75,
+          "target_accuracy": 0.8
+        }
+      }
+    },
+    {
+      "major_topic_id": "CPP_SYN_PREC",
+      "mapping_id": "UNIV_SYN_PREC",
+      "language_id": "cpp_20",
+      "tiers": {
+        "beginner": {
+          "weight": 0.52,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.58
+        },
+        "intermediate": {
+          "weight": 0.82,
+          "min_mastery_to_unlock": 0.5,
+          "target_accuracy": 0.7
+        },
+        "advanced": {
+          "weight": 1.12,
+          "min_mastery_to_unlock": 0.75,
+          "target_accuracy": 0.8
+        }
+      }
+    },
+    {
+      "major_topic_id": "CPP_VAR_01",
+      "mapping_id": "UNIV_VAR",
+      "language_id": "cpp_20",
+      "tiers": {
+        "beginner": {
+          "weight": 0.62,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.55
+        },
+        "intermediate": {
+          "weight": 0.92,
+          "min_mastery_to_unlock": 0.48,
+          "target_accuracy": 0.68
+        },
+        "advanced": {
+          "weight": 1.22,
+          "min_mastery_to_unlock": 0.7,
+          "target_accuracy": 0.78
+        }
+      }
+    },
+    {
+      "major_topic_id": "CPP_COND_01",
+      "mapping_id": "UNIV_COND",
+      "language_id": "cpp_20",
+      "tiers": {
+        "beginner": {
+          "weight": 0.52,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.58
+        },
+        "intermediate": {
+          "weight": 0.82,
+          "min_mastery_to_unlock": 0.5,
+          "target_accuracy": 0.72
+        },
+        "advanced": {
+          "weight": 1.12,
+          "min_mastery_to_unlock": 0.75,
+          "target_accuracy": 0.8
+        }
+      }
+    },
+    {
+      "major_topic_id": "CPP_LOOP_01",
+      "mapping_id": "UNIV_LOOP",
+      "language_id": "cpp_20",
+      "tiers": {
+        "beginner": {
+          "weight": 0.58,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.55
+        },
+        "intermediate": {
+          "weight": 0.88,
+          "min_mastery_to_unlock": 0.52,
+          "target_accuracy": 0.7
+        },
+        "advanced": {
+          "weight": 1.18,
+          "min_mastery_to_unlock": 0.75,
+          "target_accuracy": 0.8
+        }
+      }
+    },
+    {
+      "major_topic_id": "CPP_FUNC_01",
+      "mapping_id": "UNIV_FUNC",
+      "language_id": "cpp_20",
+      "tiers": {
+        "beginner": {
+          "weight": 0.68,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.52
+        },
+        "intermediate": {
+          "weight": 0.98,
+          "min_mastery_to_unlock": 0.45,
+          "target_accuracy": 0.65
+        },
+        "advanced": {
+          "weight": 1.35,
+          "min_mastery_to_unlock": 0.68,
+          "target_accuracy": 0.75
+        }
+      }
+    },
+    {
+      "major_topic_id": "CPP_COLL_01",
+      "mapping_id": "UNIV_COLL",
+      "language_id": "cpp_20",
+      "tiers": {
+        "beginner": {
+          "weight": 0.75,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.5
+        },
+        "intermediate": {
+          "weight": 1.05,
+          "min_mastery_to_unlock": 0.42,
+          "target_accuracy": 0.62
+        },
+        "advanced": {
+          "weight": 1.42,
+          "min_mastery_to_unlock": 0.65,
+          "target_accuracy": 0.72
+        }
+      }
+    },
+    {
+      "major_topic_id": "CPP_OOP_01",
+      "mapping_id": "UNIV_OOP",
+      "language_id": "cpp_20",
+      "tiers": {
+        "beginner": {
+          "weight": 0.82,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.48
+        },
+        "intermediate": {
+          "weight": 1.15,
+          "min_mastery_to_unlock": 0.38,
+          "target_accuracy": 0.6
+        },
+        "advanced": {
+          "weight": 1.52,
+          "min_mastery_to_unlock": 0.6,
+          "target_accuracy": 0.7
+        }
+      }
+    },
+    {
+      "major_topic_id": "GO_SYN_LOGIC",
+      "mapping_id": "UNIV_SYN_LOGIC",
+      "language_id": "go_1_21",
+      "tiers": {
+        "beginner": {
+          "weight": 0.32,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.68
+        },
+        "intermediate": {
+          "weight": 0.62,
+          "min_mastery_to_unlock": 0.5,
+          "target_accuracy": 0.78
+        },
+        "advanced": {
+          "weight": 0.92,
+          "min_mastery_to_unlock": 0.75,
+          "target_accuracy": 0.88
+        }
+      }
+    },
+    {
+      "major_topic_id": "GO_SYN_PREC",
+      "mapping_id": "UNIV_SYN_PREC",
+      "language_id": "go_1_21",
+      "tiers": {
+        "beginner": {
+          "weight": 0.34,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.68
+        },
+        "intermediate": {
+          "weight": 0.64,
+          "min_mastery_to_unlock": 0.5,
+          "target_accuracy": 0.78
+        },
+        "advanced": {
+          "weight": 0.94,
+          "min_mastery_to_unlock": 0.75,
+          "target_accuracy": 0.88
+        }
+      }
+    },
+    {
+      "major_topic_id": "GO_VAR_01",
+      "mapping_id": "UNIV_VAR",
+      "language_id": "go_1_21",
+      "tiers": {
+        "beginner": {
+          "weight": 0.38,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.65
+        },
+        "intermediate": {
+          "weight": 0.68,
+          "min_mastery_to_unlock": 0.52,
+          "target_accuracy": 0.78
+        },
+        "advanced": {
+          "weight": 0.98,
+          "min_mastery_to_unlock": 0.75,
+          "target_accuracy": 0.85
+        }
+      }
+    },
+    {
+      "major_topic_id": "GO_COND_01",
+      "mapping_id": "UNIV_COND",
+      "language_id": "go_1_21",
+      "tiers": {
+        "beginner": {
+          "weight": 0.4,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.65
+        },
+        "intermediate": {
+          "weight": 0.7,
+          "min_mastery_to_unlock": 0.5,
+          "target_accuracy": 0.78
+        },
+        "advanced": {
+          "weight": 1.0,
+          "min_mastery_to_unlock": 0.75,
+          "target_accuracy": 0.85
+        }
+      }
+    },
+    {
+      "major_topic_id": "GO_LOOP_01",
+      "mapping_id": "UNIV_LOOP",
+      "language_id": "go_1_21",
+      "tiers": {
+        "beginner": {
+          "weight": 0.42,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.62
+        },
+        "intermediate": {
+          "weight": 0.72,
+          "min_mastery_to_unlock": 0.52,
+          "target_accuracy": 0.75
+        },
+        "advanced": {
+          "weight": 1.02,
+          "min_mastery_to_unlock": 0.75,
+          "target_accuracy": 0.85
+        }
+      }
+    },
+    {
+      "major_topic_id": "GO_FUNC_01",
+      "mapping_id": "UNIV_FUNC",
+      "language_id": "go_1_21",
+      "tiers": {
+        "beginner": {
+          "weight": 0.48,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.6
+        },
+        "intermediate": {
+          "weight": 0.78,
+          "min_mastery_to_unlock": 0.48,
+          "target_accuracy": 0.72
+        },
+        "advanced": {
+          "weight": 1.12,
+          "min_mastery_to_unlock": 0.7,
+          "target_accuracy": 0.82
+        }
+      }
+    },
+    {
+      "major_topic_id": "GO_COLL_01",
+      "mapping_id": "UNIV_COLL",
+      "language_id": "go_1_21",
+      "tiers": {
+        "beginner": {
+          "weight": 0.52,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.58
+        },
+        "intermediate": {
+          "weight": 0.82,
+          "min_mastery_to_unlock": 0.48,
+          "target_accuracy": 0.72
+        },
+        "advanced": {
+          "weight": 1.18,
+          "min_mastery_to_unlock": 0.7,
+          "target_accuracy": 0.82
+        }
+      }
+    },
+    {
+      "major_topic_id": "GO_OOP_01",
+      "mapping_id": "UNIV_OOP",
+      "language_id": "go_1_21",
+      "tiers": {
+        "beginner": {
+          "weight": 0.58,
+          "min_mastery_to_unlock": 0.0,
+          "target_accuracy": 0.55
+        },
+        "intermediate": {
+          "weight": 0.88,
+          "min_mastery_to_unlock": 0.42,
+          "target_accuracy": 0.7
+        },
+        "advanced": {
+          "weight": 1.22,
+          "min_mastery_to_unlock": 0.68,
+          "target_accuracy": 0.8
+        }
+      }
+    },
+    {
       "mapping_id": "UNIV_VAR",
       "default_for_all_languages": true,
       "tiers": {
