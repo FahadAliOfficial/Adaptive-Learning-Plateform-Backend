@@ -68,13 +68,9 @@ CREATE TABLE IF NOT EXISTS exam_sessions (
 CREATE TABLE IF NOT EXISTS exam_details (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id VARCHAR REFERENCES exam_sessions(id) ON DELETE CASCADE,
-    question_id VARCHAR,
-    sub_topic VARCHAR NOT NULL,
-    difficulty REAL NOT NULL,
-    is_correct BOOLEAN NOT NULL,
-    time_spent_seconds INTEGER NOT NULL,
-    error_type VARCHAR,
-    questions_snapshot JSON
+    questions_snapshot JSON NOT NULL,
+    recommendations JSON,
+    synergy_applied BOOLEAN DEFAULT 0
 );
 
 -- Indexes for performance

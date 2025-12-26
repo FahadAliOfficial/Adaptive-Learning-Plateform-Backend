@@ -268,7 +268,7 @@ class GradingService:
             
             sql = text("""
                 UPDATE student_state 
-                SET mastery_score = LEAST(mastery_score + :val, 1.0)
+                SET mastery_score = MIN(mastery_score + :val, 1.0)
                 WHERE user_id=:u AND mapping_id=:target AND language_id=:l
             """)
             
@@ -455,7 +455,7 @@ class GradingService:
                 
                 update = text("""
                     UPDATE student_state 
-                    SET mastery_score = LEAST(mastery_score + :boost, 1.0)
+                    SET mastery_score = MIN(mastery_score + :boost, 1.0)
                     WHERE user_id=:u AND language_id=:l AND mapping_id=:m
                 """)
                 
@@ -497,17 +497,19 @@ class GradingService:
         min_score = gate['minimum_allowable_score']
         
         # Fetch current mastery for all prerequisites
-        query = text("""
+        # Build IN clause dynamically for SQLite compatibility
+        placeholders = ','.join([f':p{i}' for i in range(len(prereq_mappings))])
+        query = text(f"""
             SELECT mapping_id, mastery_score 
             FROM student_state 
-            WHERE user_id=:u AND language_id=:l AND mapping_id IN :prereqs
+            WHERE user_id=:u AND language_id=:l AND mapping_id IN ({placeholders})
         """)
         
-        results = self.db.execute(query, {
-            "u": user_id,
-            "l": language_id,
-            "prereqs": tuple(prereq_mappings)  # Use tuple for IN clause (SQL injection safe)
-        }).fetchall()
+        params = {"u": user_id, "l": language_id}
+        for i, mapping in enumerate(prereq_mappings):
+            params[f'p{i}'] = mapping
+        
+        results = self.db.execute(query, params).fetchall()
         
         mastery_map = {row[0]: row[1] for row in results}
         
@@ -570,7 +572,7 @@ class GradingService:
         
         insert = text("""
             INSERT INTO exam_details (session_id, questions_snapshot, recommendations, synergy_applied)
-            VALUES (:sid, :snap::jsonb, '{}'::jsonb, FALSE)
+            VALUES (:sid, :snap, '{}', FALSE)
         """)
         
         self.db.execute(insert, {
