@@ -1,12 +1,10 @@
 """
-Example FastAPI integration for Phase 1 services.
-This demonstrates how to wire up the grading and state vector services.
+FYP Backend API - Adaptive Learning System with Question Bank
+Integrates grading, state vector, and AI-powered question generation.
 """
 
-from fastapi import FastAPI, Depends, HTTPException, status
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
-from contextlib import contextmanager
+from fastapi import FastAPI, Depends, HTTPException, status, Request
+from sqlalchemy.orm import Session
 
 from services.schemas import (
     ExamSubmissionPayload, 
@@ -20,6 +18,9 @@ from services.grading_service import GradingService
 from services.state_vector_service import StateVectorGenerator
 from services.user_service import UserService
 
+# ✅ Import from centralized database.py
+from database import get_db, engine, Base
+
 import os
 from dotenv import load_dotenv
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -29,25 +30,31 @@ from slowapi.errors import RateLimitExceeded
 # Load environment variables
 load_dotenv()
 
-# Database setup
-DATABASE_URL = os.getenv("DATABASE_URL")
-if not DATABASE_URL:
-    raise RuntimeError("DATABASE_URL environment variable not set. Create a .env file with DATABASE_URL=postgresql://user:pass@host:5432/db")
+# Import models to register with Base (for table creation)
+import models.question_bank  # This registers QuestionBank and UserQuestionHistory tables
 
-engine = create_engine(
-    DATABASE_URL, 
-    pool_pre_ping=True,
-    pool_size=20,           # Connection pooling for performance
-    max_overflow=40
-)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# Import routers
+from routers import question_bank_router
 
-app = FastAPI(title="FYP Phase 1 API", version="1.0")
+app = FastAPI(title="FYP Backend API - Question Bank", version="2.0")
 
 # Rate limiting setup
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Register question bank routes
+app.include_router(question_bank_router.router)
+
+
+@app.on_event("startup")
+async def startup():
+    """
+    Initialize database tables on startup.
+    Only creates tables if they don't exist (safe for production).
+    """
+    Base.metadata.create_all(bind=engine)
+    print("✅ Database tables initialized (QuestionBank, UserQuestionHistory)")
 
 
 # Dependency: Database Session
@@ -59,9 +66,19 @@ def get_db():
         db.close()
 
 
+# Dependency injection for database sessions
+def get_db_dependency():
+    """
+    DEPRECATED: Use get_db from database.py instead.
+    This is kept for backward compatibility with existing routes.
+    """
+    return get_db()
+
+
 @app.post("/api/exam/submit", response_model=MasteryUpdateResponse)
 @limiter.limit("10/minute")  # Max 10 exam submissions per minute
 async def submit_exam(
+    request: Request,
     payload: ExamSubmissionPayload,
     db: Session = Depends(get_db)
 ):
@@ -131,6 +148,7 @@ async def health_check():
 @app.post("/api/user/register", response_model=UserRegistrationResponse)
 @limiter.limit("5/minute")  # Max 5 registrations per minute per IP
 async def register_user(
+    request: Request,
     payload: UserRegistrationPayload,
     db: Session = Depends(get_db)
 ):
