@@ -56,10 +56,11 @@ CREATE TABLE IF NOT EXISTS exam_sessions (
     user_id VARCHAR REFERENCES users(id) ON DELETE CASCADE,
     language_id VARCHAR NOT NULL,
     major_topic_id VARCHAR NOT NULL,
-    mapping_id VARCHAR NOT NULL,
+    session_type VARCHAR DEFAULT 'practice',
     overall_score REAL NOT NULL,
-    difficulty REAL NOT NULL,
-    time_spent_seconds INTEGER NOT NULL,
+    difficulty_assigned REAL NOT NULL,
+    time_taken_seconds INTEGER NOT NULL,
+    rl_action_taken VARCHAR NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

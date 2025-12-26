@@ -233,7 +233,7 @@ class GradingService:
         upsert = text("""
             INSERT INTO student_state 
                 (user_id, mapping_id, language_id, mastery_score, fluency_score, confidence_score, last_practiced_at, last_updated)
-            VALUES (:u, :m, :l, :ms, :fs, :cs, NOW(), NOW())
+            VALUES (:u, :m, :l, :ms, :fs, :cs, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             ON CONFLICT (user_id, mapping_id, language_id) 
             DO UPDATE SET 
                 mastery_score = EXCLUDED.mastery_score,
@@ -380,8 +380,8 @@ class GradingService:
             # Update target mapping mastery
             update_query = text("""
                 UPDATE student_state
-                SET mastery_score = LEAST(mastery_score + :boost, 1.0),
-                    last_updated = NOW()
+                SET mastery_score = MIN(mastery_score + :boost, 1.0),
+                    last_updated = CURRENT_TIMESTAMP
                 WHERE user_id = :u AND language_id = :l AND mapping_id = :m
             """)
             
