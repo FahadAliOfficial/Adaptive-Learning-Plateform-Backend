@@ -1712,6 +1712,32 @@
           "severity": 0.4,
           "remediation_boost": 0.10,
           "common_message": "Mismatched curly braces"
+        },
+        {
+          "error_type": "MISSING_QUOTES",
+          "applies_to_languages": [
+            "python_3",
+            "javascript_es6",
+            "java_17",
+            "cpp_20",
+            "go_1_21"
+          ],
+          "severity": 0.3,
+          "remediation_boost": 0.08,
+          "common_message": "String literal missing opening or closing quotes"
+        },
+        {
+          "error_type": "PARENTHESES_MISMATCH",
+          "applies_to_languages": [
+            "python_3",
+            "javascript_es6",
+            "java_17",
+            "cpp_20",
+            "go_1_21"
+          ],
+          "severity": 0.4,
+          "remediation_boost": 0.09,
+          "common_message": "Mismatched parentheses in expressions or function calls"
         }
       ]
     },
@@ -1752,6 +1778,16 @@
           "severity": 0.8,
           "remediation_boost": 0.18,
           "common_message": "Attempting to access null/nullptr reference"
+        },
+        {
+          "error_type": "IMPLICIT_TYPE_CONVERSION",
+          "applies_to_languages": [
+            "javascript_es6",
+            "python_3"
+          ],
+          "severity": 0.4,
+          "remediation_boost": 0.09,
+          "common_message": "Unexpected behavior due to implicit type conversion"
         }
       ]
     },
@@ -1784,6 +1820,19 @@
           "severity": 0.6,
           "remediation_boost": 0.12,
           "common_message": "Incorrect use of AND/OR operators"
+        },
+        {
+          "error_type": "OPERATOR_PRECEDENCE_ERROR",
+          "applies_to_languages": [
+            "python_3",
+            "javascript_es6",
+            "java_17",
+            "cpp_20",
+            "go_1_21"
+          ],
+          "severity": 0.5,
+          "remediation_boost": 0.11,
+          "common_message": "Misunderstanding of operator precedence in expressions"
         }
       ]
     },
@@ -1816,6 +1865,19 @@
           "severity": 0.5,
           "remediation_boost": 0.12,
           "common_message": "Loop iterates one time too many or too few"
+        },
+        {
+          "error_type": "LOOP_VARIABLE_SCOPE",
+          "applies_to_languages": [
+            "python_3",
+            "javascript_es6",
+            "java_17",
+            "cpp_20",
+            "go_1_21"
+          ],
+          "severity": 0.6,
+          "remediation_boost": 0.13,
+          "common_message": "Loop variable accessed outside its intended scope"
         }
       ]
     },
@@ -1892,6 +1954,17 @@
           "severity": 0.5,
           "remediation_boost": 0.10,
           "common_message": "Accessing dictionary/map with non-existent key"
+        },
+        {
+          "error_type": "COLLECTION_MODIFICATION_DURING_ITERATION",
+          "applies_to_languages": [
+            "python_3",
+            "java_17",
+            "cpp_20"
+          ],
+          "severity": 0.8,
+          "remediation_boost": 0.16,
+          "common_message": "Modifying collection while iterating over it"
         }
       ]
     },
@@ -1933,6 +2006,39 @@
           "severity": 0.7,
           "remediation_boost": 0.15,
           "common_message": "Incorrect constructor implementation or invocation"
+        }
+      ]
+    },
+    {
+      "error_category": "MEMORY_MANAGEMENT_ERRORS",
+      "mapping_id": "UNIV_VAR",
+      "common_patterns": [
+        {
+          "error_type": "MEMORY_LEAK",
+          "applies_to_languages": [
+            "cpp_20"
+          ],
+          "severity": 0.9,
+          "remediation_boost": 0.20,
+          "common_message": "Allocated memory not properly deallocated"
+        },
+        {
+          "error_type": "DOUBLE_FREE",
+          "applies_to_languages": [
+            "cpp_20"
+          ],
+          "severity": 0.9,
+          "remediation_boost": 0.19,
+          "common_message": "Attempting to free already freed memory"
+        },
+        {
+          "error_type": "DANGLING_POINTER",
+          "applies_to_languages": [
+            "cpp_20"
+          ],
+          "severity": 0.8,
+          "remediation_boost": 0.17,
+          "common_message": "Using pointer after the memory has been freed"
         }
       ]
     }
