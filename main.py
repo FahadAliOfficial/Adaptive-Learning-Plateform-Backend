@@ -35,6 +35,7 @@ import models.question_bank  # This registers QuestionBank and UserQuestionHisto
 
 # Import routers
 from routers import question_bank_router
+from routers import analytics_router
 
 app = FastAPI(title="FYP Backend API - Question Bank", version="2.0")
 
@@ -45,6 +46,9 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Register question bank routes
 app.include_router(question_bank_router.router)
+
+# Register analytics routes
+app.include_router(analytics_router.router)
 
 
 @app.on_event("startup")
