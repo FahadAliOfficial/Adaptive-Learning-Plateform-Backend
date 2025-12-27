@@ -12,6 +12,7 @@ from typing import List, Dict, Any
 
 from .schemas import ExamSubmissionPayload, QuestionResult, MasteryUpdateResponse
 from .config import get_config
+from .error_detection_service import error_detection_service
 
 
 class GradingService:
@@ -61,6 +62,9 @@ class GradingService:
             accuracy = len(corrects) / len(payload.results)
             avg_difficulty = sum(q.difficulty for q in payload.results) / len(payload.results)
             
+            # 1.5. Auto-detect error types from MCQ choices
+            enhanced_results = self._enhance_results_with_error_detection(payload.results)
+            
             # 2. Calculate Fluency (Time Efficiency)
             total_time = sum(q.time_spent for q in payload.results)
             total_expected = sum(q.expected_time for q in payload.results)
@@ -85,7 +89,7 @@ class GradingService:
                 difficulty=avg_difficulty,
                 fluency=fluency_ratio,
                 has_violations=len(gate_violations) > 0,
-                results=payload.results  # Pass results for error remediation
+                results=enhanced_results  # Use enhanced results with error detection
             )
             
             # 6. Apply Synergy Bonuses (only if accuracy >= 70%)
@@ -680,3 +684,48 @@ class GradingService:
                     suggestions.append(f"Try {target} - {benefit}% knowledge transfer available")
         
         return suggestions[:2]  # Top 2 suggestions
+
+    def _enhance_results_with_error_detection(self, results: List[QuestionResult]) -> List[QuestionResult]:
+        """
+        Enhance question results with automatic error type detection from MCQ choices.
+        """
+        enhanced = []
+        
+        for result in results:
+            # If result already has error_type or was correct, keep as-is
+            if result.error_type or result.is_correct:
+                enhanced.append(result)
+                continue
+            
+            # Try to auto-detect error type from question bank
+            try:
+                # Get question data from database
+                question_query = text("""
+                    SELECT question_data FROM question_bank WHERE id = :qid
+                """)
+                question_row = self.db.execute(question_query, {"qid": result.q_id}).fetchone()
+                
+                if question_row:
+                    question_data = question_row[0]  # JSON column
+                    
+                    # Detect error type based on selected choice
+                    detected_error = error_detection_service.detect_error_from_mcq_choice(
+                        question_data=question_data,
+                        selected_choice=result.selected_choice
+                    )
+                    
+                    if detected_error:
+                        # Create new result with detected error type
+                        enhanced_result = result.model_copy(update={'error_type': detected_error})
+                        enhanced.append(enhanced_result)
+                    else:
+                        enhanced.append(result)
+                else:
+                    enhanced.append(result)
+                    
+            except Exception as e:
+                # If error detection fails, use original result
+                print(f"Error detection failed for question {result.q_id}: {e}")
+                enhanced.append(result)
+        
+        return enhanced
