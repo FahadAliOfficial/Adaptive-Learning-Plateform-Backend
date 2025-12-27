@@ -47,14 +47,17 @@ class QuestionBank(Base):
     question_data = Column(JSON, nullable=False)
     # Structure: {
     #   "question_text": "What is the output of this code?",
-    #   "code_snippet": "for i in range(3):\n    print(i)",
+    #   "code_snippet": "for i in range(3):\n    print(i)",  # Optional - only for code-based questions
     #   "options": [
-    #     {"id": "A", "text": "0 1 2", "is_correct": true},
-    #     {"id": "B", "text": "1 2 3", "is_correct": false},
-    #     {"id": "C", "text": "0 1 2 3", "is_correct": false},
-    #     {"id": "D", "text": "Error", "is_correct": false}
+    #     {"id": "A", "text": "0 1 2", "is_correct": true, "error_type": null},
+    #     {"id": "B", "text": "1 2 3", "is_correct": false, "error_type": "OFF_BY_ONE_ERROR"},
+    #     {"id": "C", "text": "0 1 2 3", "is_correct": false, "error_type": "LOOP_BOUNDS_ERROR"},
+    #     {"id": "D", "text": "Error", "is_correct": false, "error_type": "COMPILATION_MISCONCEPTION"}
     #   ],
-    #   "explanation": "range(3) generates numbers 0, 1, 2"
+    #   "explanation": "range(3) generates numbers 0, 1, 2",
+    #   "primary_error_pattern": "LOOP_ERRORS",
+    #   "targeted_errors": ["OFF_BY_ONE_ERROR", "LOOP_BOUNDS_ERROR"],
+    #   "question_type": "code-based" | "conceptual" | "scenario-based"
     # }
     
     # Deduplication & Quality (Issue #12, #10)

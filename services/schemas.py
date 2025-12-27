@@ -14,6 +14,8 @@ class QuestionResult(BaseModel):
     sub_topic: str = Field(..., description="Exact sub_topic from curriculum")
     difficulty: float = Field(..., ge=0.0, le=1.0, description="Question difficulty weight")
     is_correct: bool = Field(..., description="Whether answer was correct")
+    selected_choice: str = Field(..., description="A, B, C, or D - student's selected answer")
+    correct_choice: str = Field(..., description="A, B, C, or D - the correct answer")
     time_spent: float = Field(..., gt=0, description="Seconds taken to answer")
     expected_time: float = Field(..., gt=0, description="Expected time for this difficulty")
     error_type: Optional[str] = Field(None, description="Error pattern if incorrect (from error_pattern_taxonomy)")
@@ -23,6 +25,12 @@ class QuestionResult(BaseModel):
         if not (0.0 <= v <= 1.0):
             raise ValueError('Difficulty must be between 0.0 and 1.0')
         return round(v, 2)
+    
+    @validator('selected_choice', 'correct_choice')
+    def validate_choice(cls, v):
+        if v not in ['A', 'B', 'C', 'D']:
+            raise ValueError('Choice must be A, B, C, or D')
+        return v
 
 
 class ExamSubmissionPayload(BaseModel):

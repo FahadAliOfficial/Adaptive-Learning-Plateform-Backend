@@ -267,23 +267,37 @@ Example:
 
 **Requirements:**
 1. Question must be clear and unambiguous
-2. Include a code snippet that demonstrates the concept
+2. Choose the most effective format:
+   - **Code-based**: Include a code snippet for output/behavior questions
+   - **Conceptual**: Focus on understanding without code for theory/principles
+   - **Scenario-based**: Describe a programming situation requiring concept application
 3. Provide exactly 4 options (A, B, C, D) with ONE correct answer
-4. Options should test understanding, not just memorization
+4. Options should test understanding, not just memorization  
 5. Include a brief explanation of the correct answer
-6. Code must be syntactically correct and runnable
+6. If using code, it must be syntactically correct and runnable
 7. Avoid trivial questions (e.g., "What keyword starts a loop?")
+
+**ERROR PATTERN FOCUS:**
+Design distractors that map to specific programming errors:
+- SYNTAX_ERRORS: Missing semicolons, brace mismatches, indentation issues
+- TYPE_ERRORS: Type mismatches, undefined variables, null pointers
+- LOGIC_ERRORS: Wrong operators, boolean logic mistakes
+- LOOP_ERRORS: Off-by-one, infinite loops, scope issues
+- FUNCTION_ERRORS: Scope problems, missing returns, argument mismatches
+- COLLECTION_ERRORS: Index bounds, key errors, modification during iteration
+- OOP_ERRORS: Inheritance mistakes, encapsulation violations
+- MEMORY_ERRORS: Memory leaks, dangling pointers (C++)
 
 **FORBIDDEN OPTIONS (DO NOT USE):**
 - ❌ "None of the above"
-- ❌ "All of the above"
+- ❌ "All of the above" 
 - ❌ "I don't know"
 - ❌ "Cannot determine"
 - ❌ "The code will not compile" (unless specifically testing compilation errors)
 
 **Distractor Quality:**
 Each wrong answer (distractor) must be:
-- Based on a common student mistake (off-by-one errors, scope confusion, etc.)
+- Based on a specific error pattern from above categories
 - Plausible enough that a beginner might choose it
 - Clearly wrong to someone who understands the concept
 
@@ -293,17 +307,35 @@ Each wrong answer (distractor) must be:
 - Advanced (0.7-1.0): Edge cases, performance, design patterns
 
 **Output Format (STRICT JSON):**
+
+**For Code-Based Questions:**
 ```json
 {{
   "question_text": "What is the output of this code?",
   "code_snippet": "# Syntactically correct code here",
   "options": [
-    {{"id": "A", "text": "Specific output value", "is_correct": true}},
-    {{"id": "B", "text": "Off-by-one error result", "is_correct": false}},
-    {{"id": "C", "text": "Scope confusion result", "is_correct": false}},
-    {{"id": "D", "text": "Wrong loop count result", "is_correct": false}}
+    {{"id": "A", "text": "Correct output", "is_correct": true, "error_type": null}},
+    {{"id": "B", "text": "Off-by-one result", "is_correct": false, "error_type": "OFF_BY_ONE_ERROR"}},
+    {{"id": "C", "text": "Wrong scope result", "is_correct": false, "error_type": "SCOPE_MISUNDERSTANDING"}},
+    {{"id": "D", "text": "Type error result", "is_correct": false, "error_type": "TYPE_MISMATCH"}}
   ],
-  "explanation": "Brief explanation of why A is correct and common mistakes in B/C/D",
+  "explanation": "Brief explanation of correct answer and common mistakes"
+}}
+```
+
+**For Conceptual Questions:**
+```json
+{{
+  "question_text": "Which statement about {lang_name} variables is correct?",
+  "options": [
+    {{"id": "A", "text": "Correct concept", "is_correct": true, "error_type": null}},
+    {{"id": "B", "text": "Scope misconception", "is_correct": false, "error_type": "SCOPE_MISUNDERSTANDING"}},
+    {{"id": "C", "text": "Type misconception", "is_correct": false, "error_type": "TYPE_MISMATCH"}},
+    {{"id": "D", "text": "Language confusion", "is_correct": false, "error_type": "LANGUAGE_CONFUSION_ERROR"}}
+  ],
+  "explanation": "Brief explanation of the concept and why distractors are wrong"
+}}
+```
   "quality_assessment": {{
     "score": 0.85,
     "reasoning": "Question tests understanding with realistic distractors"
@@ -351,6 +383,10 @@ Each wrong answer (distractor) must be:
         for opt in data['options']:
             if not all(k in opt for k in ['id', 'text', 'is_correct']):
                 raise ValueError(f"Invalid option structure: {opt}")
+            
+            # Validate error_type for wrong answers
+            if not opt['is_correct'] and 'error_type' not in opt:
+                print(f"Warning: Wrong answer {opt['id']} missing error_type mapping")
         
         # Ensure exactly one correct answer
         correct_count = sum(1 for opt in data['options'] if opt['is_correct'])
