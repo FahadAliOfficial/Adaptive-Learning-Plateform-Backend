@@ -542,14 +542,22 @@ class GradingService:
         difficulty: float, 
         fluency: float
     ) -> uuid.UUID:
-        """Save session to exam_sessions table."""
+        """Save session to exam_sessions table with Phase 2B adaptive difficulty."""
         session_id = uuid.uuid4()
+        
+        # Phase 2B: Calculate recommended difficulty for NEXT session
+        mapping_id = self.config.get_mapping_id(payload.language_id, payload.major_topic_id)
+        recommended_next_diff = self._calculate_adaptive_difficulty(
+            payload.user_id,
+            payload.language_id,
+            mapping_id
+        )
         
         insert = text("""
             INSERT INTO exam_sessions 
                 (id, user_id, language_id, major_topic_id, session_type, 
-                 overall_score, difficulty_assigned, time_taken_seconds, rl_action_taken)
-            VALUES (:id, :u, :l, :t, :st, :score, :diff, :time, :action)
+                 overall_score, difficulty_assigned, time_taken_seconds, rl_action_taken, recommended_next_difficulty)
+            VALUES (:id, :u, :l, :t, :st, :score, :diff, :time, :action, :next_diff)
         """)
         
         self.db.execute(insert, {
@@ -561,7 +569,8 @@ class GradingService:
             "score": accuracy,
             "diff": difficulty,
             "time": payload.total_time_seconds,
-            "action": "GRADED"  # Placeholder for RL action
+            "action": "GRADED",  # Placeholder for RL action
+            "next_diff": recommended_next_diff
         })
         
         return session_id
@@ -604,7 +613,7 @@ class GradingService:
     ) -> List[str]:
         """
         Generate study recommendations based on current state.
-        Includes difficulty tier suggestions.
+        Includes difficulty tier suggestions and Phase 2B predictions.
         """
         recommendations = []
         
@@ -612,12 +621,34 @@ class GradingService:
         if violations:
             recommendations.append(f"⚠️ Strengthen prerequisites before advancing: {', '.join(violations)}")
         
-        # Get recommended difficulty tier
-        tier = self.config.get_difficulty_tier(current_mapping, current_mastery)
-        tier_emoji = {"beginner": "🟢", "intermediate": "🟡", "advanced": "🔴"}
-        recommendations.append(f"{tier_emoji.get(tier, '⚪')} Recommended difficulty tier: {tier.upper()}")
+        # Phase 2B Feature #16: Adaptive difficulty recommendation
+        adaptive_diff = self._calculate_adaptive_difficulty(user_id, language_id, current_mapping)
         
-        # Check if ready for next topic
+        if adaptive_diff > 0.8:
+            recommendations.append(f"🔥 Next difficulty: ADVANCED ({adaptive_diff:.2f}) - You're crushing it!")
+        elif adaptive_diff > 0.6:
+            recommendations.append(f"📈 Next difficulty: INTERMEDIATE ({adaptive_diff:.2f}) - Good progress!")
+        else:
+            recommendations.append(f"🌱 Next difficulty: BEGINNER ({adaptive_diff:.2f}) - Building foundations")
+        
+        # Phase 2B Feature #17: Time to mastery prediction
+        prediction = self._predict_time_to_mastery(user_id, language_id, current_mapping, current_mastery)
+        
+        if prediction['estimated_hours'] is not None:
+            hours = prediction['estimated_hours']
+            sessions = prediction['estimated_sessions']
+            conf = int(prediction['confidence'] * 100)
+            
+            if hours == 0:
+                recommendations.append(f"🎯 Mastery achieved! ({current_mastery:.2f})")
+            elif hours < 2:
+                recommendations.append(f"⏱️ Almost there! ~{hours:.1f} hours to mastery ({conf}% confidence)")
+            elif hours < 5:
+                recommendations.append(f"📅 ~{hours:.1f} hours ({sessions} sessions) to reach mastery")
+            else:
+                recommendations.append(f"🎯 Long-term goal: ~{hours:.1f} hours to mastery")
+        
+        # Check if ready for next topic (original logic)
         if current_mastery >= 0.75:
             recommendations.append(f"✅ Strong mastery ({current_mastery:.2f})! Ready to advance to next topic.")
         elif current_mastery >= 0.65:
@@ -729,3 +760,211 @@ class GradingService:
                 enhanced.append(result)
         
         return enhanced
+    
+    def _calculate_adaptive_difficulty(
+        self, 
+        user_id: str, 
+        language_id: str, 
+        mapping_id: str
+    ) -> float:
+        """
+        Calculate recommended difficulty for next session based on recent performance.
+        
+        Phase 2B Feature #16: Adaptive Difficulty Curves
+        
+        Algorithm:
+        1. Fetch last 10 sessions for this mapping_id
+        2. Calculate average accuracy
+        3. Apply adjustment rules from config (accuracy ranges → multipliers)
+        4. Smooth with current difficulty to prevent abrupt jumps
+        5. Clamp to bounds (0.3 to 1.0)
+        
+        Returns:
+            float: Recommended difficulty (0.3 to 1.0)
+        """
+        config = self.config.transition_map.get('adaptive_difficulty_curves', {})
+        window_size = config.get('performance_windows', {}).get('sample_size', 10)
+        
+        # 1. Fetch last N sessions for this topic
+        # Need to get major_topic_id from mapping_id
+        major_topic_id = self.config.get_major_topic_id(language_id, mapping_id)
+        
+        query = text("""
+            SELECT overall_score, difficulty_assigned
+            FROM exam_sessions
+            WHERE user_id = :u 
+              AND language_id = :l 
+              AND major_topic_id = :m
+            ORDER BY created_at DESC
+            LIMIT :window
+        """)
+        
+        sessions = self.db.execute(query, {
+            "u": user_id,
+            "l": language_id,
+            "m": major_topic_id,
+            "window": window_size
+        }).fetchall()
+        
+        if not sessions:
+            # No history - use beginner difficulty
+            return 0.5
+        
+        # 2. Calculate average accuracy from recent sessions
+        avg_accuracy = sum(s[0] for s in sessions) / len(sessions)
+        current_difficulty = sessions[0][1]  # Most recent difficulty
+        
+        # 3. Apply adjustment rules based on accuracy ranges
+        difficulty_multiplier = 1.0  # Default: maintain
+        
+        for rule in config.get('adjustment_rules', []):
+            accuracy_range = rule.get('accuracy_range', [0.0, 1.0])
+            if accuracy_range[0] <= avg_accuracy < accuracy_range[1]:
+                difficulty_multiplier = rule.get('difficulty_multiplier', 1.0)
+                break
+        
+        # Calculate adjusted difficulty
+        adjusted_difficulty = current_difficulty * difficulty_multiplier
+        
+        # 4. Smooth with current difficulty (prevents sudden jumps)
+        # This is implicit in the multiplier approach, but we can add extra smoothing
+        # For now, the multiplier itself provides smoothing (1.1x, 1.3x vs raw jumps)
+        
+        # 5. Clamp to bounds
+        min_diff = 0.3
+        max_diff = 1.0
+        
+        return max(min_diff, min(adjusted_difficulty, max_diff))
+    
+    def _predict_time_to_mastery(
+        self,
+        user_id: str,
+        language_id: str,
+        mapping_id: str,
+        current_mastery: float
+    ) -> Dict[str, Any]:
+        """
+        Predict hours and sessions needed to reach 0.75 mastery.
+        
+        Phase 2B Feature #17: Temporal Learning Patterns
+        
+        Algorithm:
+        1. Get baseline estimates from config (e.g., UNIV_VAR: 4 hours)
+        2. Calculate user's learning velocity from last 5 sessions
+        3. Predict time needed: mastery_gap / velocity
+        4. Calculate confidence based on data availability
+        
+        Returns:
+            {
+                "estimated_hours": 2.5,
+                "estimated_sessions": 3,
+                "current_velocity": 0.12,  # mastery points per hour
+                "confidence": 0.85
+            }
+        """
+        # Get temporal pattern from config
+        patterns = self.config.transition_map.get('temporal_learning_patterns', [])
+        pattern = next((p for p in patterns if p['mapping_id'] == mapping_id), None)
+        
+        if not pattern:
+            return {
+                "estimated_hours": None, 
+                "estimated_sessions": None,
+                "current_velocity": None,
+                "confidence": 0.0
+            }
+        
+        target_mastery = 0.75
+        mastery_gap = target_mastery - current_mastery
+        
+        if mastery_gap <= 0:
+            # Already mastered
+            return {
+                "estimated_hours": 0.0,
+                "estimated_sessions": 0,
+                "current_velocity": 0.0,
+                "confidence": 1.0
+            }
+        
+        # Get major_topic_id for this mapping
+        try:
+            major_topic_id = self.config.get_major_topic_id(language_id, mapping_id)
+        except ValueError:
+            # Fallback if mapping not found
+            return {
+                "estimated_hours": pattern.get('estimated_hours', 5.0),
+                "estimated_sessions": pattern.get('sessions_to_mastery', 5),
+                "current_velocity": None,
+                "confidence": 0.3
+            }
+        
+        # Calculate user's current velocity (mastery improvement per hour)
+        # Use overall_score from exam_sessions as a proxy for mastery at that time
+        velocity_query = text("""
+            SELECT created_at, overall_score, time_taken_seconds
+            FROM exam_sessions 
+            WHERE user_id = :u 
+              AND language_id = :l
+              AND major_topic_id = :m
+            ORDER BY created_at ASC
+            LIMIT 10
+        """)
+        
+        sessions = self.db.execute(velocity_query, {
+            "u": user_id, 
+            "l": language_id, 
+            "m": major_topic_id
+        }).fetchall()
+        
+        if len(sessions) >= 2:
+            # Calculate velocity from actual data
+            # Use time range between first and last session, not sum of durations
+            timestamps = [s[0] for s in sessions]
+            mastery_values = [s[1] for s in sessions]
+            
+            # Parse timestamps if they're strings (SQLite compatibility)
+            parsed_timestamps = []
+            for ts in timestamps:
+                if isinstance(ts, str):
+                    ts = datetime.fromisoformat(ts.replace('Z', '+00:00'))
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=timezone.utc)
+                parsed_timestamps.append(ts)
+            
+            # Calculate time elapsed between first and last session
+            time_delta = (parsed_timestamps[-1] - parsed_timestamps[0]).total_seconds() / 3600.0  # hours
+            mastery_delta = max(mastery_values) - min(mastery_values)
+            
+            if time_delta > 0 and mastery_delta > 0:
+                user_velocity = mastery_delta / time_delta  # mastery points per hour
+            else:
+                # Use baseline from config
+                avg_hours = pattern.get('estimated_hours', 5.0)
+                user_velocity = 1.0 / avg_hours
+            
+            # Confidence increases with more data
+            session_count = len(sessions)
+            confidence = min(session_count / 10.0, 0.95)  # Max 95% confidence after 10+ sessions
+        else:
+            # No history - use average from config
+            avg_hours = pattern.get('estimated_hours', 5.0)
+            user_velocity = None  # No velocity data
+            confidence = 0.0  # No confidence without data
+        
+        # Predict hours needed
+        if user_velocity and user_velocity > 0:
+            estimated_hours = mastery_gap / user_velocity
+        else:
+            # No velocity data - use baseline from config
+            estimated_hours = pattern.get('estimated_hours', 5.0)
+        
+        # Predict sessions (using optimal session length from config)
+        optimal_session_minutes = pattern.get('optimal_session_length_minutes', 45)
+        estimated_sessions = int((estimated_hours * 60) / optimal_session_minutes) + 1
+        
+        return {
+            "estimated_hours": round(estimated_hours, 1),
+            "estimated_sessions": estimated_sessions,
+            "current_velocity": round(user_velocity, 3) if user_velocity else None,
+            "confidence": round(confidence, 2)
+        }

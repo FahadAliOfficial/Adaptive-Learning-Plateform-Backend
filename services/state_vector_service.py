@@ -57,8 +57,8 @@ class StateVectorGenerator:
         self.lambda_decay = self.config.get_decay_rate()
         
         # Vector dimension calculation (DYNAMIC - adapts to curriculum changes!)
-        # Structure: language_onehot + (mappings × 3 scores) + 8 behavioral metrics (includes cold-start signals)
-        self.vector_size = len(self.languages_order) + (len(self.mappings_order) * 3) + 8
+        # Structure: language_onehot + (mappings × 3 scores) + 9 behavioral metrics (includes cold-start + adaptive difficulty)
+        self.vector_size = len(self.languages_order) + (len(self.mappings_order) * 3) + 9
         
         # Calculate index offsets dynamically (prevents corruption on curriculum changes!)
         self.lang_offset = 0
@@ -104,7 +104,7 @@ class StateVectorGenerator:
         for i, mapping_id in enumerate(self.mappings_order):
             vector[self.confidence_offset + i] = confidence_map.get(mapping_id, 0.0)
         
-        # 5. Behavioral Metrics [behavioral_offset : behavioral_offset + 8] (includes cold-start signals)
+        # 5. Behavioral Metrics [behavioral_offset : behavioral_offset + 9] (includes cold-start + Phase 2B adaptive difficulty)
         metrics = self._get_behavioral_metrics(user_id, language_id)
         vector[self.behavioral_offset + 0] = metrics['last_accuracy']
         vector[self.behavioral_offset + 1] = metrics['last_difficulty']
@@ -112,8 +112,9 @@ class StateVectorGenerator:
         vector[self.behavioral_offset + 3] = metrics['stability']
         vector[self.behavioral_offset + 4] = metrics['days_inactive']
         vector[self.behavioral_offset + 5] = metrics['gate_readiness']
-        vector[self.behavioral_offset + 6] = metrics['session_confidence']  # NEW: Cold-start signal
-        vector[self.behavioral_offset + 7] = metrics['performance_velocity']  # NEW: Fast learner detection
+        vector[self.behavioral_offset + 6] = metrics['session_confidence']  # Cold-start signal
+        vector[self.behavioral_offset + 7] = metrics['performance_velocity']  # Fast learner detection
+        vector[self.behavioral_offset + 8] = metrics['adaptive_difficulty']  # Phase 2B: Recommended next difficulty
         
         # 6. Generate rich metadata (prerequisites, transfer potential, errors)
         metadata = self._generate_metadata(vector, user_id, language_id, mastery_map)
@@ -196,11 +197,12 @@ class StateVectorGenerator:
         - gate_readiness: % of soft gate prerequisites met
         - session_confidence: Cold-start signal (0.0 = new user, 1.0 = experienced)
         - performance_velocity: Fast learner detection (1.0 if high accuracy + fluency + difficulty)
+        - adaptive_difficulty: Phase 2B - Recommended difficulty for next session (0.3-1.0)
         """
         
-        # Last session stats
+        # Last session stats (Phase 2B: includes recommended_next_difficulty)
         last_session_query = text("""
-            SELECT overall_score, difficulty_assigned, time_taken_seconds, created_at
+            SELECT overall_score, difficulty_assigned, time_taken_seconds, created_at, recommended_next_difficulty
             FROM exam_sessions 
             WHERE user_id=:u AND language_id=:l 
             ORDER BY created_at DESC 
@@ -213,6 +215,7 @@ class StateVectorGenerator:
             last_accuracy = last_session[0]
             last_difficulty = last_session[1]
             last_date = last_session[3]
+            adaptive_difficulty = last_session[4] or 0.5  # Default to 0.5 if NULL
             
             # Parse datetime if it's a string (SQLite compatibility)
             if isinstance(last_date, str):
@@ -225,6 +228,7 @@ class StateVectorGenerator:
             last_accuracy = 0.0
             last_difficulty = 0.5
             days_inactive = 999  # Never practiced
+            adaptive_difficulty = 0.5  # Default beginner-intermediate
         
         # Average fluency
         fluency_query = text("""
@@ -278,7 +282,8 @@ class StateVectorGenerator:
             'days_inactive': min(days_inactive, 30),  # Cap for normalization
             'gate_readiness': round(gate_readiness, 3),
             'session_confidence': round(session_confidence, 3),  # NEW: Cold-start signal
-            'performance_velocity': round(performance_velocity, 1)  # NEW: Fast learner flag
+            'performance_velocity': round(performance_velocity, 1),  # Fast learner flag
+            'adaptive_difficulty': round(adaptive_difficulty, 3)  # Phase 2B: Next recommended difficulty
         }
     
     def _calculate_gate_readiness(self, user_id: str, language_id: str) -> float:
@@ -390,7 +395,7 @@ class StateVectorGenerator:
             "prerequisites_status": prereq_status,
             "transfer_potential": transfer_potential,
             "recent_error_patterns": error_patterns,
-            "state_vector_version": "3.0",  # Updated version with cold-start support
+            "state_vector_version": "4.0",  # Phase 2B: Added adaptive difficulty dimension (36D)
             "vector_dimensions": len(vector)
         }
     

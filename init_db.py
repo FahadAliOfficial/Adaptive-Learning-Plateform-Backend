@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS user_seen_questions (
     PRIMARY KEY (user_id, question_id)
 );
 
--- 5. Exam Sessions
+-- 5. Exam Sessions (with Phase 2B: Adaptive Difficulty)
 CREATE TABLE IF NOT EXISTS exam_sessions (
     id VARCHAR PRIMARY KEY,
     user_id VARCHAR REFERENCES users(id) ON DELETE CASCADE,
@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS exam_sessions (
     difficulty_assigned REAL NOT NULL,
     time_taken_seconds INTEGER NOT NULL,
     rl_action_taken VARCHAR NOT NULL,
+    recommended_next_difficulty REAL DEFAULT 0.5,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -78,6 +79,9 @@ CREATE INDEX IF NOT EXISTS idx_student_state_user ON student_state(user_id);
 CREATE INDEX IF NOT EXISTS idx_exam_sessions_user ON exam_sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_question_bank_mapping_lang ON question_bank(mapping_id, language_id);
 CREATE INDEX IF NOT EXISTS idx_question_bank_difficulty ON question_bank(difficulty);
+
+-- Phase 2B: Adaptive difficulty optimization (10-session window queries)
+CREATE INDEX IF NOT EXISTS idx_adaptive_difficulty_window ON exam_sessions(user_id, language_id, major_topic_id, created_at DESC);
 """
 
 if __name__ == "__main__":

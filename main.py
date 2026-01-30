@@ -5,6 +5,7 @@ Integrates grading, state vector, and AI-powered question generation.
 
 from fastapi import FastAPI, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 
 from services.schemas import (
     ExamSubmissionPayload, 
@@ -19,7 +20,7 @@ from services.state_vector_service import StateVectorGenerator
 from services.user_service import UserService
 
 # ✅ Import from centralized database.py
-from database import get_db, engine, Base
+from database import get_db, engine, Base, SessionLocal
 
 import os
 from dotenv import load_dotenv
@@ -144,9 +145,78 @@ async def health_check():
     """Simple health check endpoint."""
     return {
         "status": "healthy",
-        "phase": "1",
-        "version": "1.0"
+        "phase": "2B",
+        "version": "2.0",
+        "features": ["adaptive_difficulty", "temporal_predictions"]
     }
+
+
+@app.get("/api/progress/prediction")
+@limiter.limit("10/minute")  # Max 10 prediction requests per minute
+async def get_progress_prediction(
+    request: Request,
+    user_id: str,
+    language_id: str,
+    mapping_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Phase 2B Feature #17: Get time-to-mastery prediction for a topic.
+    
+    Returns estimated hours and sessions needed to reach 0.75 mastery,
+    based on user's learning velocity and config baselines.
+    
+    Example:
+        GET /api/progress/prediction?user_id=abc-123&language_id=python_3&mapping_id=UNIV_LOOP
+    
+    Response:
+        {
+            "mapping_id": "UNIV_LOOP",
+            "current_mastery": 0.45,
+            "target_mastery": 0.75,
+            "prediction": {
+                "estimated_hours": 3.2,
+                "estimated_sessions": 5,
+                "current_velocity": 0.094,
+                "confidence": 0.6
+            }
+        }
+    """
+    try:
+        from services.grading_service import GradingService
+        
+        grading_service = GradingService(db)
+        
+        # Get current mastery
+        current_query = text("""
+            SELECT mastery_score FROM student_state
+            WHERE user_id = :u AND language_id = :l AND mapping_id = :m
+        """)
+        current = db.execute(current_query, {
+            "u": user_id, 
+            "l": language_id, 
+            "m": mapping_id
+        }).scalar() or 0.0
+        
+        # Get prediction
+        prediction = grading_service._predict_time_to_mastery(
+            user_id, language_id, mapping_id, current
+        )
+        
+        return {
+            "success": True,
+            "mapping_id": mapping_id,
+            "language_id": language_id,
+            "current_mastery": round(current, 3),
+            "target_mastery": 0.75,
+            "prediction": prediction
+        }
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Prediction failed: {str(e)}"
+        )
 
 
 @app.post("/api/user/register", response_model=UserRegistrationResponse)
