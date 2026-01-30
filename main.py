@@ -18,6 +18,7 @@ from services.schemas import (
 from services.grading_service import GradingService
 from services.state_vector_service import StateVectorGenerator
 from services.user_service import UserService
+from services.review_scheduler import ReviewScheduler
 
 # ✅ Import from centralized database.py
 from database import get_db, engine, Base, SessionLocal
@@ -145,10 +146,114 @@ async def health_check():
     """Simple health check endpoint."""
     return {
         "status": "healthy",
-        "phase": "2B",
-        "version": "2.0",
-        "features": ["adaptive_difficulty", "temporal_predictions"]
+        "phase": "2C",
+        "version": "2.1",
+        "features": ["adaptive_difficulty", "temporal_predictions", "spaced_repetition"]
     }
+
+
+@app.get("/api/reviews/due")
+@limiter.limit("10/minute")  # Max 10 requests per minute
+async def get_due_reviews(
+    request: Request,
+    user_id: str,
+    language_id: str = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Phase 2C: Get all reviews due for a user.
+    
+    Returns topics that need review based on spaced repetition schedule.
+    Sorted by priority (most urgent first), then by date.
+    
+    Example:
+        GET /api/reviews/due?user_id=abc-123&language_id=python_3
+    
+    Response:
+        {
+            "user_id": "abc-123",
+            "total_due": 3,
+            "reviews": [
+                {
+                    "mapping_id": "UNIV_LOOP",
+                    "language_id": "python_3",
+                    "current_mastery": 0.68,
+                    "due_date": "2026-01-25T10:00:00Z",
+                    "priority": 3,
+                    "days_overdue": 2
+                }
+            ]
+        }
+    """
+    try:
+        scheduler = ReviewScheduler(db)
+        due_reviews = scheduler.get_due_reviews(user_id, language_id)
+        
+        return {
+            "success": True,
+            "user_id": user_id,
+            "total_due": len(due_reviews),
+            "reviews": due_reviews
+        }
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch due reviews: {str(e)}"
+        )
+
+
+@app.get("/api/reviews/upcoming")
+@limiter.limit("10/minute")  # Max 10 requests per minute
+async def get_upcoming_reviews(
+    request: Request,
+    user_id: str,
+    language_id: str = None,
+    days_ahead: int = 7,
+    db: Session = Depends(get_db)
+):
+    """
+    Phase 2C: Get reviews scheduled in the next N days.
+    
+    Helps users plan their study schedule by showing upcoming reviews.
+    
+    Example:
+        GET /api/reviews/upcoming?user_id=abc-123&days_ahead=7
+    
+    Response:
+        {
+            "user_id": "abc-123",
+            "days_ahead": 7,
+            "upcoming_count": 5,
+            "reviews": [
+                {
+                    "mapping_id": "UNIV_VAR",
+                    "language_id": "python_3",
+                    "due_date": "2026-01-28T10:00:00Z",
+                    "priority": 2,
+                    "current_mastery": 0.82,
+                    "interval_days": 7
+                }
+            ]
+        }
+    """
+    try:
+        scheduler = ReviewScheduler(db)
+        upcoming = scheduler.get_upcoming_reviews(user_id, language_id, days_ahead)
+        
+        return {
+            "success": True,
+            "user_id": user_id,
+            "days_ahead": days_ahead,
+            "upcoming_count": len(upcoming),
+            "reviews": upcoming
+        }
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch upcoming reviews: {str(e)}"
+        )
 
 
 @app.get("/api/progress/prediction")

@@ -13,6 +13,7 @@ from typing import List, Dict, Any
 from .schemas import ExamSubmissionPayload, QuestionResult, MasteryUpdateResponse
 from .config import get_config
 from .error_detection_service import error_detection_service
+from .review_scheduler import ReviewScheduler
 
 
 class GradingService:
@@ -134,6 +135,25 @@ class GradingService:
                 new_mastery,
                 gate_violations
             )
+            
+            # 11. Phase 2C: Schedule review for this topic
+            scheduler = ReviewScheduler(self.db)
+            scheduler.schedule_review(
+                user_id=payload.user_id,
+                language_id=payload.language_id,
+                mapping_id=mapping_id,
+                current_mastery=new_mastery
+            )
+            
+            # 12. Phase 2C: If this was a review session, mark it completed
+            if payload.session_type == "review":
+                scheduler.mark_review_completed(
+                    user_id=payload.user_id,
+                    language_id=payload.language_id,
+                    mapping_id=mapping_id,
+                    review_accuracy=accuracy,
+                    new_mastery=new_mastery
+                )
             
             # COMMIT TRANSACTION: All operations succeeded
             self.db.commit()

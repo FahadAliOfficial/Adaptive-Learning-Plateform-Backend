@@ -50,13 +50,13 @@ CREATE TABLE IF NOT EXISTS user_seen_questions (
     PRIMARY KEY (user_id, question_id)
 );
 
--- 5. Exam Sessions (with Phase 2B: Adaptive Difficulty)
+-- 5. Exam Sessions (with Phase 2B: Adaptive Difficulty, Phase 2C: Review Type)
 CREATE TABLE IF NOT EXISTS exam_sessions (
     id VARCHAR PRIMARY KEY,
     user_id VARCHAR REFERENCES users(id) ON DELETE CASCADE,
     language_id VARCHAR NOT NULL,
     major_topic_id VARCHAR NOT NULL,
-    session_type VARCHAR DEFAULT 'practice',
+    session_type VARCHAR DEFAULT 'practice',  -- 'practice', 'diagnostic', 'review'
     overall_score REAL NOT NULL,
     difficulty_assigned REAL NOT NULL,
     time_taken_seconds INTEGER NOT NULL,
@@ -82,6 +82,40 @@ CREATE INDEX IF NOT EXISTS idx_question_bank_difficulty ON question_bank(difficu
 
 -- Phase 2B: Adaptive difficulty optimization (10-session window queries)
 CREATE INDEX IF NOT EXISTS idx_adaptive_difficulty_window ON exam_sessions(user_id, language_id, major_topic_id, created_at DESC);
+
+-- 7. Phase 2C: Review Schedule (Spaced Repetition)
+CREATE TABLE IF NOT EXISTS review_schedule (
+    id VARCHAR PRIMARY KEY,
+    user_id VARCHAR REFERENCES users(id) ON DELETE CASCADE,
+    language_id VARCHAR NOT NULL,
+    mapping_id VARCHAR NOT NULL,
+    
+    -- Review metadata
+    current_mastery REAL NOT NULL,
+    mastery_at_last_review REAL,
+    days_since_last_review INTEGER DEFAULT 0,
+    
+    -- Scheduling
+    next_review_date TIMESTAMP NOT NULL,
+    review_interval_days INTEGER NOT NULL,
+    review_priority INTEGER DEFAULT 0,
+    
+    -- Performance tracking
+    successful_reviews INTEGER DEFAULT 0,
+    failed_reviews INTEGER DEFAULT 0,
+    personal_decay_rate REAL DEFAULT 0.02,
+    
+    -- Timestamps
+    last_reviewed_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    UNIQUE(user_id, language_id, mapping_id)
+);
+
+-- Phase 2C: Indexes for review queries
+CREATE INDEX IF NOT EXISTS idx_review_schedule_lookup ON review_schedule(user_id, language_id, next_review_date);
+CREATE INDEX IF NOT EXISTS idx_review_schedule_due ON review_schedule(next_review_date);
 """
 
 if __name__ == "__main__":
