@@ -116,6 +116,34 @@ CREATE TABLE IF NOT EXISTS review_schedule (
 -- Phase 2C: Indexes for review queries
 CREATE INDEX IF NOT EXISTS idx_review_schedule_lookup ON review_schedule(user_id, language_id, next_review_date);
 CREATE INDEX IF NOT EXISTS idx_review_schedule_due ON review_schedule(next_review_date);
+
+-- 8. Phase 2D: Error History (Advanced Error Pattern Analysis)
+CREATE TABLE IF NOT EXISTS error_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id VARCHAR REFERENCES users(id) ON DELETE CASCADE,
+    language_id VARCHAR NOT NULL,
+    mapping_id VARCHAR NOT NULL,
+    session_id VARCHAR REFERENCES exam_sessions(id) ON DELETE CASCADE,
+    question_id VARCHAR NOT NULL,
+    
+    -- Error details
+    error_type VARCHAR NOT NULL,
+    error_category VARCHAR NOT NULL,
+    severity REAL NOT NULL,
+    
+    -- Context
+    difficulty_tier INTEGER DEFAULT 1,
+    is_corrected BOOLEAN DEFAULT 0,
+    
+    -- Timestamps
+    occurred_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    corrected_at TIMESTAMP
+);
+
+-- Phase 2D: Indexes for pattern analysis queries
+CREATE INDEX IF NOT EXISTS idx_error_history_user ON error_history(user_id, language_id, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_error_history_pattern ON error_history(user_id, error_type, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_error_history_session ON error_history(session_id);
 """
 
 if __name__ == "__main__":

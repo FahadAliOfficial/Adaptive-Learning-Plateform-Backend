@@ -107,6 +107,42 @@ class ErrorDetectionService:
             "Study the underlying programming principles"
         ])
     
+    def get_error_severity(self, error_type: str) -> float:
+        """Get severity score (0.0-1.0) for an error type."""
+        taxonomy = self.config.transition_map.get('error_pattern_taxonomy', [])
+        
+        for category in taxonomy:
+            for pattern in category.get('common_patterns', []):
+                if pattern.get('error_type') == error_type:
+                    return pattern.get('severity', 0.5)
+        
+        return 0.5  # Default medium severity
+    
+    def get_pattern_metadata(self, error_type: str) -> Dict[str, Any]:
+        """Get full metadata for an error pattern."""
+        taxonomy = self.config.transition_map.get('error_pattern_taxonomy', [])
+        
+        for category in taxonomy:
+            for pattern in category.get('common_patterns', []):
+                if pattern.get('error_type') == error_type:
+                    return {
+                        **pattern,
+                        "category": category.get('error_category'),
+                        "mapping_id": category.get('mapping_id')
+                    }
+        
+        return {}
+    
+    def list_patterns_by_category(self, category: str) -> List[Dict]:
+        """List all error patterns in a category."""
+        taxonomy = self.config.transition_map.get('error_pattern_taxonomy', [])
+        
+        for cat in taxonomy:
+            if cat.get('error_category') == category:
+                return cat.get('common_patterns', [])
+        
+        return []
+    
     def validate_question_error_mapping(self, question_data: Dict[str, Any]) -> List[str]:
         """
         Validate that a question has proper error type mappings.

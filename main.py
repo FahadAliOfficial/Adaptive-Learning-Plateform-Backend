@@ -19,6 +19,7 @@ from services.grading_service import GradingService
 from services.state_vector_service import StateVectorGenerator
 from services.user_service import UserService
 from services.review_scheduler import ReviewScheduler
+from services.pattern_analyzer import PatternAnalyzer
 
 # ✅ Import from centralized database.py
 from database import get_db, engine, Base, SessionLocal
@@ -146,9 +147,9 @@ async def health_check():
     """Simple health check endpoint."""
     return {
         "status": "healthy",
-        "phase": "2C",
-        "version": "2.1",
-        "features": ["adaptive_difficulty", "temporal_predictions", "spaced_repetition"]
+        "phase": "2D",
+        "version": "2.2",
+        "features": ["adaptive_difficulty", "temporal_predictions", "spaced_repetition", "error_pattern_analysis"]
     }
 
 
@@ -253,6 +254,64 @@ async def get_upcoming_reviews(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch upcoming reviews: {str(e)}"
+        )
+
+
+@app.get("/api/analytics/error-patterns")
+@limiter.limit("10/minute")  # Max 10 requests per minute
+async def get_error_patterns(
+    request: Request,
+    user_id: str,
+    language_id: str,
+    window_size: int = 50,
+    db: Session = Depends(get_db)
+):
+    """
+    Phase 2D: Get advanced error pattern analysis for a user.
+    
+    Returns personalized error insights, trends, and remediation plan.
+    Uses hybrid scoring: frequency × severity for prioritization.
+    
+    Example:
+        GET /api/analytics/error-patterns?user_id=abc-123&language_id=python_3
+    
+    Response:
+        {
+            "success": true,
+            "top_errors": [
+                {
+                    "error_type": "OFF_BY_ONE_ERROR",
+                    "count": 12,
+                    "severity": 0.5,
+                    "priority_score": 6.0,
+                    "category": "LOOP_ERRORS",
+                    "remediation_boost": 0.12,
+                    "suggested_practice": "Loop iterates one time too many or too few"
+                }
+            ],
+            "error_trends": {
+                "improving": ["MISSING_SEMICOLON"],
+                "persistent": ["OFF_BY_ONE_ERROR", "INDEX_OUT_OF_BOUNDS"]
+            },
+            "recommended_remediation": [
+                "1. Off By One Error (MEDIUM priority, occurred 12x) - Loop iterates one time too many or too few"
+            ],
+            "total_errors_analyzed": 45
+        }
+    """
+    try:
+        analyzer = PatternAnalyzer(db)
+        analysis = analyzer.analyze_user_patterns(user_id, language_id, window_size)
+        
+        return {
+            "success": True,
+            **analysis
+        }
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to analyze error patterns: {str(e)}"
         )
 
 

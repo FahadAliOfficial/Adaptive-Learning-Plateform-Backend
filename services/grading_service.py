@@ -14,6 +14,7 @@ from .schemas import ExamSubmissionPayload, QuestionResult, MasteryUpdateRespons
 from .config import get_config
 from .error_detection_service import error_detection_service
 from .review_scheduler import ReviewScheduler
+from .pattern_analyzer import PatternAnalyzer
 
 
 class GradingService:
@@ -154,6 +155,27 @@ class GradingService:
                     review_accuracy=accuracy,
                     new_mastery=new_mastery
                 )
+            
+            # 13. Phase 2D: Log errors and track corrections
+            pattern_analyzer = PatternAnalyzer(self.db)
+            for result in enhanced_results:
+                if not result.is_correct and result.error_type:
+                    pattern_analyzer.log_error(
+                        user_id=payload.user_id,
+                        language_id=payload.language_id,
+                        mapping_id=result.sub_topic,
+                        session_id=payload.session_id,
+                        question_id=result.q_id,
+                        error_type=result.error_type,
+                        difficulty_tier=getattr(result, 'difficulty_tier', 1)
+                    )
+                elif result.is_correct and result.error_type:
+                    # Mark previous errors of this type as corrected
+                    pattern_analyzer.mark_error_corrected(
+                        user_id=payload.user_id,
+                        language_id=payload.language_id,
+                        error_type=result.error_type
+                    )
             
             # COMMIT TRANSACTION: All operations succeeded
             self.db.commit()
