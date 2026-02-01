@@ -18,7 +18,10 @@ test_concept_interdependencies.py
 COLD_START_IMPLEMENTATION.md
 COMPREHENSIVE_ANALYSIS_REPORT.md
 PROJECT_ANALYSIS_REPORT.md
-
+PHASE_2C_COMPLETE.md
+PHASE_2C_SUMMARY.md
+SESSION_PROGRESS_SUMMARY.md
+UI_REQUIREMENTS.md
 # Environment variables
 .env
 .env.local
@@ -26,6 +29,7 @@ PROJECT_ANALYSIS_REPORT.md
 
 # Python
 __pycache__/
+
 *.py[cod]
 *$py.class
 *.so
@@ -40,6 +44,11 @@ ENV/
 *.swp
 *.swo
 
-
+/future_implementation
 # /future_implementation
 /tests
+models/a2c/
+models/dqn/
+models/ppo/
+tensorboard/
+evaluation_results/
