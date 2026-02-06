@@ -72,7 +72,7 @@ class QuestionBank(Base):
     
     # Metadata
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
-    created_by = Column(String, default="gemini-1.5-pro")  # "human", "gemini-1.5-pro", etc.
+    created_by = Column(String, default="gpt-4o-mini")  # "human", "gpt-4o-mini", etc.
     
     # Relationships
     usage_history = relationship("UserQuestionHistory", back_populates="question", cascade="all, delete-orphan")

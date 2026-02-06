@@ -39,7 +39,7 @@ class GradingService:
         self.fluency_old_weight = 0.8
         self.fluency_new_weight = 0.2
     
-    def process_submission(self, payload: ExamSubmissionPayload) -> MasteryUpdateResponse:
+    def process_submission(self, payload: ExamSubmissionPayload, background_tasks=None) -> MasteryUpdateResponse:
         """
         Main entry point for exam submission processing.
         
@@ -51,6 +51,7 @@ class GradingService:
         5. Apply synergy bonuses
         6. Store session history
         7. Return recommendations
+        8. Trigger background exam analysis (if background_tasks provided)
         
         Note: All DB operations wrapped in transaction for atomicity.
         """
@@ -186,6 +187,15 @@ class GradingService:
             
             # COMMIT TRANSACTION: All operations succeeded
             self.db.commit()
+            
+            # 14. Trigger background exam analysis generation (OpenAI GPT-4o-mini)
+            if background_tasks:
+                from services.background_tasks import generate_exam_analysis_task
+                background_tasks.add_task(
+                    generate_exam_analysis_task,
+                    session_id=str(session_id),
+                    db_connection_string=str(self.db.bind.url)
+                )
             
             return MasteryUpdateResponse(
                 success=True,

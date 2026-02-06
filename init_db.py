@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS question_bank (
     times_correct INTEGER DEFAULT 0,
     calibrated_difficulty FLOAT,
     created_at TIMESTAMP DEFAULT NOW(),
-    created_by VARCHAR DEFAULT 'gemini-1.5-pro'
+    created_by VARCHAR DEFAULT 'gpt-4o-mini'
 );
 
 -- 4. User Question History (tracks which questions each user has seen)
@@ -82,7 +82,13 @@ CREATE TABLE IF NOT EXISTS exam_details (
     session_id VARCHAR REFERENCES exam_sessions(id) ON DELETE CASCADE,
     questions_snapshot JSONB NOT NULL,
     recommendations JSONB,
-    synergy_applied BOOLEAN DEFAULT FALSE
+    synergy_applied BOOLEAN DEFAULT FALSE,
+    
+    -- LLM-powered exam analysis (OpenAI GPT-4o-mini)
+    analysis_status VARCHAR(20) DEFAULT 'pending',
+    analysis_bullets TEXT[],
+    analysis_generated_at TIMESTAMP,
+    analysis_error TEXT
 );
 
 -- Indexes for performance

@@ -11,7 +11,7 @@ import uuid
 
 from database import get_db
 from models.question_bank import QuestionBank, UserQuestionHistory
-from services.content_engine.gemini_factory import GeminiFactory
+from services.content_engine.openai_factory import OpenAIFactory
 from services.content_engine.selector import QuestionSelector
 from services.content_engine.validator import MultiLanguageValidator
 
@@ -132,7 +132,7 @@ def _background_generate(
     print(f"[Background Task {task_id[:8]}] Starting generation of {count} questions...")
     
     try:
-        factory = GeminiFactory()
+        factory = OpenAIFactory()
         validator = MultiLanguageValidator()
         jsonl = JSONLBackup()  # Initialize JSONL backup
         
@@ -228,7 +228,7 @@ async def generate_questions(
     db: Session = Depends(get_db)
 ):
     """
-    Generate MCQ questions using Gemini AI (async background task).
+    Generate MCQ questions using OpenAI GPT-4o-mini (async background task).
     
     Returns immediately with task_id.
     Questions are generated in background and stored as 'unverified'.
@@ -258,8 +258,8 @@ async def generate_questions(
         task_id=task_id
     )
     
-    # Estimate time (2-3 seconds per question with Gemini API)
-    estimated_time = request.count * 2.5
+    # Estimate time (1-2 seconds per question with OpenAI API)
+    estimated_time = request.count * 1.5
     
     return GenerateResponse(
         task_id=task_id,

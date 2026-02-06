@@ -3,7 +3,7 @@ FYP Backend API - Adaptive Learning System with Question Bank
 Integrates grading, state vector, and AI-powered question generation.
 """
 
-from fastapi import FastAPI, Depends, HTTPException, status, Request
+from fastapi import FastAPI, Depends, HTTPException, status, Request, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
@@ -178,6 +178,7 @@ async def start_exam_session(
 async def submit_exam(
     request: Request,
     payload: ExamSubmissionPayload,
+    background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
@@ -226,7 +227,7 @@ async def submit_exam(
     
     try:
         grading_service = GradingService(db)
-        result = grading_service.process_submission(payload)
+        result = grading_service.process_submission(payload, background_tasks)
         return result
     
     except ValueError as e:
@@ -240,6 +241,70 @@ async def submit_exam(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Processing failed: {str(e)}"
         )
+
+
+@app.get("/api/exam/analysis/{session_id}")
+async def get_exam_analysis(
+    session_id: str,
+    current_user: dict = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get LLM-generated exam analysis (personalized feedback).
+    Analysis is generated asynchronously after exam submission.
+    
+    **Requires:** Valid JWT access token
+    
+    Returns:
+        {
+            "status": "completed" | "generating" | "pending" | "failed",
+            "bullets": ["...", "...", ...],  // Max 5
+            "generated_at": "2026-02-06T12:30:00",
+            "error": null
+        }
+    """
+    # Verify session belongs to user
+    check = db.execute(text("""
+        SELECT es.user_id
+        FROM exam_sessions es
+        WHERE es.id = :sid
+    """), {"sid": session_id}).fetchone()
+    
+    if not check:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session not found"
+        )
+    
+    if check[0] != current_user["id"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Session belongs to another user"
+        )
+    
+    # Get analysis
+    analysis = db.execute(text("""
+        SELECT 
+            analysis_status,
+            analysis_bullets,
+            analysis_generated_at,
+            analysis_error
+        FROM exam_details
+        WHERE session_id = :sid
+    """), {"sid": session_id}).fetchone()
+    
+    if not analysis:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analysis not found"
+        )
+    
+    return {
+        "status": analysis[0],
+        "bullets": analysis[1],  # PostgreSQL array → Python list
+        "generated_at": analysis[2].isoformat() if analysis[2] else None,
+        "error": analysis[3]
+    }
 
 
 @app.post("/api/rl/state-vector", response_model=StateVectorResponse)
