@@ -4,6 +4,7 @@ Integrates grading, state vector, and AI-powered question generation.
 """
 
 from fastapi import FastAPI, Depends, HTTPException, status, Request, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
@@ -45,7 +46,46 @@ from routers import analytics_router
 from routers import auth_router
 from routers import rl_router
 
-app = FastAPI(title="FYP Backend API - Adaptive Learning", version="2.0")
+app = FastAPI(
+    title="FYP Backend API - Adaptive Learning",
+    version="2.0",
+    docs_url="/api/docs",        # Swagger UI at http://localhost:8000/api/docs
+    redoc_url="/api/redoc",      # ReDoc at http://localhost:8000/api/redoc
+    description="""
+    🎓 **Adaptive Learning System API**
+    
+    ## Features
+    - 🔐 JWT Authentication
+    - 📝 AI-Powered Question Generation (OpenAI GPT-4o-mini)
+    - 📊 Adaptive Exam System with RL Recommendations
+    - 🤖 Multi-Agent RL (A2C, DQN, PPO)
+    - 📈 Multi-Level Analytics
+    - ⚠️ Question Reporting System
+    - 📉 Performance Analytics
+    
+    ## Authentication
+    Most endpoints require a valid JWT token in the Authorization header:
+    ```
+    Authorization: Bearer <your_access_token>
+    ```
+    """
+)
+
+# CORS Configuration - Allow frontend to connect
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",      # React default
+        "http://localhost:5173",      # Vite default
+        "http://localhost:4200",      # Angular default
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:5173",
+        # Add production frontend URL here when deployed
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],              # Allow all HTTP methods (GET, POST, PUT, DELETE, etc.)
+    allow_headers=["*"],              # Allow all headers (Authorization, Content-Type, etc.)
+)
 
 # Rate limiting setup
 limiter = Limiter(key_func=get_remote_address)
