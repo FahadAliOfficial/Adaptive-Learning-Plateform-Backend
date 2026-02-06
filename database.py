@@ -18,13 +18,17 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     raise RuntimeError("DATABASE_URL not set in .env file")
 
-# Engine with optimized pooling
+# PostgreSQL-optimized engine configuration
 engine = create_engine(
     DATABASE_URL,
-    pool_pre_ping=True,    # Verify connections before using
-    pool_size=20,          # Number of connections to keep open
-    max_overflow=40,       # Max additional connections when pool full
-    echo=False             # Set True for SQL debugging
+    pool_pre_ping=True,           # Verify connections before using
+    pool_size=20,                 # Number of connections to keep open
+    max_overflow=40,              # Max additional connections when pool full
+    pool_recycle=3600,            # Recycle connections after 1 hour
+    echo=False,                   # Set True for SQL debugging
+    connect_args={
+        "options": "-c timezone=utc"  # Force UTC timezone
+    } if DATABASE_URL.startswith("postgresql") else {}
 )
 
 # Session factory
