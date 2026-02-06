@@ -35,19 +35,27 @@ CREATE TABLE IF NOT EXISTS question_bank (
     content_hash VARCHAR UNIQUE NOT NULL,
     mapping_id VARCHAR NOT NULL,
     language_id VARCHAR NOT NULL,
+    sub_topic VARCHAR,
     difficulty REAL NOT NULL,
     question_data JSON NOT NULL,
     is_verified BOOLEAN DEFAULT 0,
-    use_count INTEGER DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    quality_score REAL DEFAULT 0.5,
+    times_used INTEGER DEFAULT 0,
+    times_correct INTEGER DEFAULT 0,
+    calibrated_difficulty REAL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR DEFAULT 'gemini-1.5-pro'
 );
 
--- 4. User Seen Questions
-CREATE TABLE IF NOT EXISTS user_seen_questions (
-    user_id VARCHAR REFERENCES users(id) ON DELETE CASCADE,
+-- 4. User Question History (tracks which questions each user has seen)
+CREATE TABLE IF NOT EXISTS user_question_history (
+    id VARCHAR PRIMARY KEY,
+    user_id VARCHAR NOT NULL,
     question_id VARCHAR REFERENCES question_bank(id) ON DELETE CASCADE,
-    seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (user_id, question_id)
+    session_id VARCHAR,
+    was_correct BOOLEAN,
+    time_spent_seconds REAL,
+    seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 5. Exam Sessions (with Phase 2B: Adaptive Difficulty, Phase 2C: Review Type)
@@ -144,6 +152,24 @@ CREATE TABLE IF NOT EXISTS error_history (
 CREATE INDEX IF NOT EXISTS idx_error_history_user ON error_history(user_id, language_id, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS idx_error_history_pattern ON error_history(user_id, error_type, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS idx_error_history_session ON error_history(session_id);
+
+-- 9. User State Vectors (for analytics service - stores session snapshots)
+CREATE TABLE IF NOT EXISTS user_state_vectors (
+    id VARCHAR PRIMARY KEY,
+    user_id VARCHAR REFERENCES users(id) ON DELETE CASCADE,
+    language_id VARCHAR NOT NULL,
+    session_snapshot JSON NOT NULL,
+    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Index for user state vectors queries
+CREATE INDEX IF NOT EXISTS idx_user_state_vectors_lookup ON user_state_vectors(user_id, language_id, last_updated DESC);
+
+-- Index for user_question_history
+CREATE INDEX IF NOT EXISTS idx_user_question_history_user ON user_question_history(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_question_history_question ON user_question_history(question_id);
+CREATE INDEX IF NOT EXISTS idx_user_question_history_unique ON user_question_history(user_id, question_id);
 """
 
 if __name__ == "__main__":
