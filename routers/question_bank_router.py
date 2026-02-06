@@ -357,6 +357,7 @@ async def select_questions(
 @router.post("/mark-seen", response_model=MarkSeenResponse)
 async def mark_questions_seen(
     request: MarkSeenRequest,
+    current_user: dict = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -364,7 +365,16 @@ async def mark_questions_seen(
     
     Optionally include performance data (was_correct, time_spent_seconds)
     for analytics and difficulty calibration.
+    
+    **Requires:** Authentication
     """
+    # Verify user can only mark their own questions as seen
+    if current_user["id"] != request.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot mark questions as seen for other users"
+        )
+    
     selector = QuestionSelector(db)
     
     # Validate question IDs exist
@@ -398,6 +408,7 @@ async def get_warehouse_status(
     mapping_id: str,
     difficulty: float,
     difficulty_tolerance: float = 0.1,
+    current_user: dict = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -411,6 +422,8 @@ async def get_warehouse_status(
     - avg_quality_score: Average AI-assessed quality
     
     Use this to trigger background replenishment.
+    
+    **Requires:** Authentication
     """
     selector = QuestionSelector(db)
     
@@ -488,6 +501,7 @@ async def get_pending_questions(
     language_id: Optional[str] = None,
     mapping_id: Optional[str] = None,
     limit: int = 50,
+    current_user: dict = Depends(get_current_admin_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -498,7 +512,7 @@ async def get_pending_questions(
     - mapping_id: Filter by curriculum topic
     - limit: Max questions to return (default 50)
     
-    Requires admin authentication (TODO: Add auth middleware)
+    **Requires:** Admin authentication
     """
     query = db.query(QuestionBank).filter(
         QuestionBank.is_verified == False

@@ -75,16 +75,17 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000",      # React default
+        "http://localhost:3000",      # Next.js default
         "http://localhost:5173",      # Vite default
         "http://localhost:4200",      # Angular default
-        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3000",      # Next.js (127.0.0.1)
         "http://127.0.0.1:5173",
-        # Add production frontend URL here when deployed
+        "http://127.0.0.1:4200",
     ],
     allow_credentials=True,
     allow_methods=["*"],              # Allow all HTTP methods (GET, POST, PUT, DELETE, etc.)
     allow_headers=["*"],              # Allow all headers (Authorization, Content-Type, etc.)
+    expose_headers=["*"],             # Expose all headers to frontend
 )
 
 # Rate limiting setup
@@ -103,6 +104,27 @@ app.include_router(analytics_router.router)
 
 # Register RL routes
 app.include_router(rl_router.router)
+
+
+@app.get("/")
+async def root():
+    """Root endpoint - Health check"""
+    return {
+        "status": "ok",
+        "message": "FYP Backend API is running",
+        "version": "1.0.0",
+        "docs": "/docs"
+    }
+
+
+@app.get("/api/health")
+async def health_check():
+    """Health check endpoint for monitoring"""
+    return {
+        "status": "healthy",
+        "database": "connected",
+        "timestamp": "2026-02-07T00:00:00Z"
+    }
 
 
 @app.on_event("startup")

@@ -4,8 +4,34 @@ Aligned with final_curriculum.json and transition_map.json.
 """
 
 from pydantic import BaseModel, Field, validator
-from typing import List, Optional, Literal
+from typing import List, Optional, Literal, Union
 from uuid import UUID
+import json
+from pathlib import Path
+
+
+# Load language IDs dynamically from curriculum
+def _load_language_ids() -> List[str]:
+    """Load available language IDs from final_curriculum.json"""
+    curriculum_path = Path(__file__).parent.parent / "core" / "final_curriculum.json"
+    
+    try:
+        with open(curriculum_path, 'r', encoding='utf-8') as f:
+            curriculum = json.load(f)
+            language_ids = [item["language_id"] for item in curriculum]
+            return language_ids
+    except Exception as e:
+        # Fallback to hardcoded values if file cannot be loaded
+        print(f"Warning: Could not load curriculum file, using fallback values. Error: {e}")
+        return ["python_3", "javascript_es6", "java_17", "cpp_20", "go_1_21", "typescript_5"]
+
+
+# Available language IDs (cached at module load)
+AVAILABLE_LANGUAGES = _load_language_ids()
+
+# Type alias for language IDs (for Pydantic validation)
+# Note: Pydantic validates against the AVAILABLE_LANGUAGES list at runtime
+LanguageIdType = str
 
 
 class QuestionResult(BaseModel):
@@ -36,7 +62,7 @@ class QuestionResult(BaseModel):
 class ExamStartRequest(BaseModel):
     """Request to start a new exam session."""
     user_id: str = Field(..., description="User UUID")
-    language_id: Literal["python_3", "javascript_es6", "java_17", "cpp_20", "go_1_21"]
+    language_id: LanguageIdType = Field(..., description="Language identifier from curriculum")
     major_topic_id: str = Field(..., description="e.g., 'PY_VAR_01', 'JS_FUNC_01'")
     session_type: Literal["diagnostic", "practice"] = Field(default="practice")
 
@@ -46,6 +72,12 @@ class ExamStartRequest(BaseModel):
             UUID(v)
         except ValueError:
             raise ValueError('Invalid UUID format for user_id')
+        return v
+
+    @validator('language_id')
+    def validate_language(cls, v):
+        if v not in AVAILABLE_LANGUAGES:
+            raise ValueError(f'Invalid language_id: {v}. Available: {", ".join(AVAILABLE_LANGUAGES)}')
         return v
 
     @validator('major_topic_id')
@@ -66,7 +98,7 @@ class ExamSubmissionPayload(BaseModel):
     """Complete exam session submission from frontend."""
     user_id: str = Field(..., description="User UUID")
     session_id: str = Field(..., description="Session UUID from /api/exam/start")
-    language_id: Literal["python_3", "javascript_es6", "java_17", "cpp_20", "go_1_21"]
+    language_id: LanguageIdType = Field(..., description="Language identifier from curriculum")
     major_topic_id: str = Field(..., description="e.g., 'PY_VAR_01', 'JS_FUNC_01'")
     session_type: Literal["diagnostic", "practice"] = Field(default="practice")
     results: List[QuestionResult] = Field(..., min_items=5, max_items=50)
@@ -78,6 +110,12 @@ class ExamSubmissionPayload(BaseModel):
             UUID(v)
         except ValueError:
             raise ValueError('Invalid UUID format for user_id')
+        return v
+
+    @validator('language_id')
+    def validate_language(cls, v):
+        if v not in AVAILABLE_LANGUAGES:
+            raise ValueError(f'Invalid language_id: {v}. Available: {", ".join(AVAILABLE_LANGUAGES)}')
         return v
 
     @validator('major_topic_id')
@@ -103,7 +141,7 @@ class MasteryUpdateResponse(BaseModel):
 class StateVectorRequest(BaseModel):
     """Request for RL state vector generation."""
     user_id: str
-    language_id: Literal["python_3", "javascript_es6", "java_17", "cpp_20", "go_1_21"]
+    language_id: LanguageIdType = Field(..., description="Language identifier from curriculum")
 
     @validator('user_id')
     def validate_uuid(cls, v):
@@ -112,6 +150,12 @@ class StateVectorRequest(BaseModel):
             return str(UUID(v))
         except ValueError:
             raise ValueError(f'Invalid UUID format for user_id: {v}')
+
+    @validator('language_id')
+    def validate_language(cls, v):
+        if v not in AVAILABLE_LANGUAGES:
+            raise ValueError(f'Invalid language_id: {v}. Available: {", ".join(AVAILABLE_LANGUAGES)}')
+        return v
 
 
 class StateVectorResponse(BaseModel):
@@ -124,10 +168,10 @@ class UserRegistrationPayload(BaseModel):
     """New user registration request."""
     email: str = Field(..., description="User email address")
     password: str = Field(..., min_length=6, description="User password (will be hashed)")
-    language_id: Literal["python_3", "javascript_es6", "java_17", "cpp_20", "go_1_21"]
-    experience_level: Literal["beginner", "intermediate", "advanced"] = Field(
-        default="beginner",
-        description="Self-reported experience level for initial state priming"
+    language_id: Optional[LanguageIdType] = Field(None, description="Language identifier from curriculum (optional - set during onboarding)")
+    experience_level: Optional[Literal["beginner", "intermediate", "advanced"]] = Field(
+        None,
+        description="Self-reported experience level for initial state priming (optional - set during onboarding)"
     )
 
     @validator('email')
@@ -136,6 +180,12 @@ class UserRegistrationPayload(BaseModel):
             raise ValueError('Invalid email format')
         return v.lower()
 
+    @validator('language_id')
+    def validate_language(cls, v):
+        if v is not None and v not in AVAILABLE_LANGUAGES:
+            raise ValueError(f'Invalid language_id: {v}. Available: {", ".join(AVAILABLE_LANGUAGES)}')
+        return v
+
 
 class UserRegistrationResponse(BaseModel):
     """Response after successful user registration."""
@@ -143,6 +193,8 @@ class UserRegistrationResponse(BaseModel):
     message: str
     starting_topic: str = Field(..., description="Language-specific major_topic_id to start with")
     experience_level: str
+    access_token: str = Field(..., description="JWT access token (30 min expiry)")
+    token_type: str = Field(default="bearer", description="Token type")
 
 
 # ==================== Authentication Schemas ====================
@@ -162,7 +214,7 @@ class LoginRequest(BaseModel):
 class LoginResponse(BaseModel):
     """Response after successful login."""
     access_token: str = Field(..., description="JWT access token")
-    refresh_token: str = Field(..., description="JWT refresh token for getting new access tokens")
+    refresh_token: Optional[str] = Field(None, description="JWT refresh token (set as httpOnly cookie, not in response)")
     token_type: str = Field(default="bearer", description="Token type")
     user_id: str
     email: str
@@ -206,7 +258,7 @@ class PasswordChangeResponse(BaseModel):
 class RecommendationRequest(BaseModel):
     """Request for RL curriculum recommendation."""
     user_id: str = Field(..., description="User UUID")
-    language_id: Literal["python_3", "javascript_es6", "java_17", "cpp_20", "go_1_21"]
+    language_id: LanguageIdType = Field(..., description="Language identifier from curriculum")
     strategy: Literal["ppo", "dqn", "a2c", "ensemble", "baseline"] = Field(
         default="a2c",
         description="RL model strategy to use for recommendation"
@@ -222,6 +274,12 @@ class RecommendationRequest(BaseModel):
             return str(UUID(v))
         except ValueError:
             raise ValueError(f'Invalid UUID format for user_id: {v}')
+
+    @validator('language_id')
+    def validate_language(cls, v):
+        if v not in AVAILABLE_LANGUAGES:
+            raise ValueError(f'Invalid language_id: {v}. Available: {", ".join(AVAILABLE_LANGUAGES)}')
+        return v
 
 
 class RecommendationResponse(BaseModel):

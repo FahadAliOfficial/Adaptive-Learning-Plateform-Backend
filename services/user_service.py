@@ -62,53 +62,67 @@ class UserService:
             "id": user_id,
             "email": payload.email,
             "password": hashed_password,
-            "language": payload.language_id
+            "language": payload.language_id  # Can be None for new users
         })
         
-        # 3. Get experience level configuration
-        exp_config = self.config.get_experience_config(payload.experience_level)
-        initial_mastery = exp_config.get('initial_mastery_estimate', 0.0)
-        assumed_mastered = exp_config.get('assumed_mastered', [])
+        # 3. Initialize learning state only if language and experience are provided
+        # Otherwise, user will complete onboarding later
+        starting_topic = "ONBOARDING_REQUIRED"
+        experience_msg = ""
         
-        # 4. Pre-populate assumed knowledge
-        # If they are "intermediate" or "advanced", give them credit for basics
-        for mapping_id in assumed_mastered:
-            insert_state = text("""
-                INSERT INTO student_state 
-                    (user_id, mapping_id, language_id, mastery_score, fluency_score, confidence_score, last_practiced_at, last_updated)
-                VALUES 
-                    (:user_id, :mapping_id, :language_id, :mastery, :fluency, :confidence, NOW(), NOW())
-            """)
+        if payload.language_id and payload.experience_level:
+            # Get experience level configuration
+            exp_config = self.config.get_experience_config(payload.experience_level)
+            initial_mastery = exp_config.get('initial_mastery_estimate', 0.0)
+            assumed_mastered = exp_config.get('assumed_mastered', [])
+            experience_msg = f" at {payload.experience_level} level"
             
-            self.db.execute(insert_state, {
-                "user_id": user_id,
-                "mapping_id": mapping_id,
-                "language_id": payload.language_id,
-                "mastery": initial_mastery,
-                "fluency": 1.2,      # Slightly above average (assumed practice)
-                "confidence": 0.5    # Medium confidence (not verified)
-            })
+            # 4. Pre-populate assumed knowledge
+            # If they are "intermediate" or "advanced", give them credit for basics
+            for mapping_id in assumed_mastered:
+                insert_state = text("""
+                    INSERT INTO student_state 
+                        (user_id, mapping_id, language_id, mastery_score, fluency_score, confidence_score, last_practiced_at, last_updated)
+                    VALUES 
+                        (:user_id, :mapping_id, :language_id, :mastery, :fluency, :confidence, NOW(), NOW())
+                """)
+                
+                self.db.execute(insert_state, {
+                    "user_id": user_id,
+                    "mapping_id": mapping_id,
+                    "language_id": payload.language_id,
+                    "mastery": initial_mastery,
+                    "fluency": 1.2,      # Slightly above average (assumed practice)
+                    "confidence": 0.5    # Medium confidence (not verified)
+                })
+                
+            # Get language-specific starting topic
+            starting_mapping_id = exp_config.get('starting_mapping_id', 'UNIV_SYN_LOGIC')
+            try:
+                starting_topic = self.config.get_major_topic_id(
+                    payload.language_id, 
+                    starting_mapping_id
+                )
+            except ValueError:
+                # Fallback to first topic if mapping fails
+                starting_topic = f"{payload.language_id[:2].upper()}_SYN_LOGIC"
         
         # 5. Commit all changes
         self.db.commit()
         
-        # 6. Get language-specific starting topic
-        starting_mapping_id = exp_config.get('starting_mapping_id', 'UNIV_SYN_LOGIC')
-        try:
-            starting_topic = self.config.get_major_topic_id(
-                payload.language_id, 
-                starting_mapping_id
-            )
-        except ValueError:
-            # Fallback to first topic if mapping fails
-            starting_topic = f"{payload.language_id[:2].upper()}_SYN_LOGIC"
+        # Generate JWT tokens for immediate login after registration
+        token_data = {"sub": user_id, "email": payload.email}
+        access_token = create_access_token(token_data)
+        refresh_token = create_refresh_token({"sub": user_id})
         
         return UserRegistrationResponse(
             user_id=user_id,
-            message=f"User registered successfully at {payload.experience_level} level.",
+            message=f"User registered successfully{experience_msg}.",
             starting_topic=starting_topic,
-            experience_level=payload.experience_level
-        )
+            experience_level=payload.experience_level or "not_set",
+            access_token=access_token,
+            token_type="bearer"
+        ), refresh_token  # Return refresh_token separately for cookie
     
     def get_user_starting_topic(self, user_id: str, language_id: str) -> Dict[str, Any]:
         """
