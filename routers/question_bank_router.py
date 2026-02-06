@@ -15,12 +15,9 @@ from services.content_engine.openai_factory import OpenAIFactory
 from services.content_engine.selector import QuestionSelector
 from services.content_engine.validator import MultiLanguageValidator
 from services.auth import get_current_active_user, get_current_admin_user
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 
 
 router = APIRouter(prefix="/question-bank", tags=["Question Bank"])
-limiter = Limiter(key_func=get_remote_address)
 
 
 # ==================== REQUEST/RESPONSE SCHEMAS ====================
@@ -266,9 +263,8 @@ def _background_generate(
 # ==================== API ENDPOINTS ====================
 
 @router.post("/generate", response_model=GenerateResponse, status_code=status.HTTP_202_ACCEPTED)
-@limiter.limit("50/minute")
 async def generate_questions(
-    req: Request,
+    request: Request,
     payload: GenerateRequest,
     background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_active_user),
