@@ -13,7 +13,9 @@ from services.schemas import (
     StateVectorRequest,
     StateVectorResponse,
     UserRegistrationPayload,
-    UserRegistrationResponse
+    UserRegistrationResponse,
+    ExamStartRequest,
+    ExamStartResponse
 )
 from services.grading_service import GradingService
 from services.state_vector_service import StateVectorGenerator
@@ -104,6 +106,73 @@ def get_db_dependency():
     return get_db()
 
 
+@app.post("/api/exam/start", response_model=ExamStartResponse)
+@limiter.limit("20/minute")  # Max 20 session starts per minute
+async def start_exam_session(
+    request: Request,
+    payload: ExamStartRequest,
+    current_user: dict = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Phase 3 #13: Start a new exam session.
+    Creates a session record in 'started' state without scores.
+    
+    **Requires:** Valid JWT access token
+    
+    Workflow:
+    1. Verify user_id matches authenticated user
+    2. Generate session_id and create exam_sessions record
+    3. Return session_id to frontend for later submission
+    """
+    # Verify user_id matches authenticated user
+    if payload.user_id != current_user["id"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot start session for another user"
+        )
+    
+    try:
+        import uuid
+        from datetime import datetime
+        
+        session_id = str(uuid.uuid4())
+        started_at = datetime.now()
+        
+        # Create session in 'started' state
+        db.execute(text("""
+            INSERT INTO exam_sessions (
+                id, user_id, language_id, major_topic_id, 
+                session_type, session_status, started_at, created_at
+            )
+            VALUES (
+                :session_id, :user_id, :language_id, :major_topic_id,
+                :session_type, 'started', :started_at, :created_at
+            )
+        """), {
+            "session_id": session_id,
+            "user_id": payload.user_id,
+            "language_id": payload.language_id,
+            "major_topic_id": payload.major_topic_id,
+            "session_type": payload.session_type,
+            "started_at": started_at,
+            "created_at": started_at
+        })
+        db.commit()
+        
+        return ExamStartResponse(
+            session_id=session_id,
+            started_at=started_at.isoformat()
+        )
+    
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create session: {str(e)}"
+        )
+
+
 @app.post("/api/exam/submit", response_model=MasteryUpdateResponse)
 @limiter.limit("10/minute")  # Max 10 exam submissions per minute
 async def submit_exam(
@@ -120,15 +189,39 @@ async def submit_exam(
     
     Workflow:
     1. Validate payload (Pydantic handles this)
-    2. Verify user owns the submission (user_id matches token)
-    3. Process submission through GradingService
-    4. Return updated mastery + recommendations
+    2. Verify session exists and belongs to user
+    3. Verify user owns the submission (user_id matches token)
+    4. Process submission through GradingService
+    5. Return updated mastery + recommendations
     """
     # Verify user_id matches authenticated user
     if payload.user_id != current_user["id"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Cannot submit exam for another user"
+        )
+    
+    # Verify session exists and belongs to user
+    session_check = db.execute(text("""
+        SELECT user_id, session_status FROM exam_sessions WHERE id = :session_id
+    """), {"session_id": payload.session_id}).fetchone()
+    
+    if not session_check:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session not found"
+        )
+    
+    if session_check[0] != payload.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Session belongs to another user"
+        )
+    
+    if session_check[1] != 'started':
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Session already {session_check[1]}"
         )
     
     try:
@@ -166,12 +259,20 @@ async def get_state_vector(
     2. Generate 27-dimensional state vector
     3. Return vector + human-readable metadata
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
     try:
+        logger.info(f"[API] State vector request for user {request.user_id[:8]}... language {request.language_id}")
         vector_service = StateVectorGenerator(db)
         result = vector_service.generate_vector(request)
+        logger.info(f"[API] State vector generated successfully")
         return result
     
     except Exception as e:
+        logger.error(f"[API] State vector generation failed: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"State vector generation failed: {str(e)}"

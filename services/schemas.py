@@ -33,9 +33,39 @@ class QuestionResult(BaseModel):
         return v
 
 
+class ExamStartRequest(BaseModel):
+    """Request to start a new exam session."""
+    user_id: str = Field(..., description="User UUID")
+    language_id: Literal["python_3", "javascript_es6", "java_17", "cpp_20", "go_1_21"]
+    major_topic_id: str = Field(..., description="e.g., 'PY_VAR_01', 'JS_FUNC_01'")
+    session_type: Literal["diagnostic", "practice"] = Field(default="practice")
+
+    @validator('user_id')
+    def validate_uuid(cls, v):
+        try:
+            UUID(v)
+        except ValueError:
+            raise ValueError('Invalid UUID format for user_id')
+        return v
+
+    @validator('major_topic_id')
+    def validate_topic_format(cls, v):
+        """Ensure format like PY_VAR_01, JS_FUNC_01, etc."""
+        if not (v.count('_') >= 2 and v[-2:].isdigit()):
+            raise ValueError(f'Invalid major_topic_id format: {v}')
+        return v
+
+
+class ExamStartResponse(BaseModel):
+    """Response after starting an exam session."""
+    session_id: str = Field(..., description="Session UUID for submission")
+    started_at: str = Field(..., description="ISO timestamp when session started")
+
+
 class ExamSubmissionPayload(BaseModel):
     """Complete exam session submission from frontend."""
     user_id: str = Field(..., description="User UUID")
+    session_id: str = Field(..., description="Session UUID from /api/exam/start")
     language_id: Literal["python_3", "javascript_es6", "java_17", "cpp_20", "go_1_21"]
     major_topic_id: str = Field(..., description="e.g., 'PY_VAR_01', 'JS_FUNC_01'")
     session_type: Literal["diagnostic", "practice"] = Field(default="practice")

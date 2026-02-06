@@ -591,8 +591,9 @@ class GradingService:
         difficulty: float, 
         fluency: float
     ) -> uuid.UUID:
-        """Save session to exam_sessions table with Phase 2B adaptive difficulty."""
-        session_id = uuid.uuid4()
+        """Update session in exam_sessions table (from 'started' to 'completed')."""
+        # Use session_id from payload (created by /api/exam/start)
+        session_id = uuid.UUID(payload.session_id)
         
         # Phase 2B: Calculate recommended difficulty for NEXT session
         mapping_id = self.config.get_mapping_id(payload.language_id, payload.major_topic_id)
@@ -602,19 +603,20 @@ class GradingService:
             mapping_id
         )
         
-        insert = text("""
-            INSERT INTO exam_sessions 
-                (id, user_id, language_id, major_topic_id, session_type, 
-                 overall_score, difficulty_assigned, time_taken_seconds, rl_action_taken, recommended_next_difficulty)
-            VALUES (:id, :u, :l, :t, :st, :score, :diff, :time, :action, :next_diff)
+        update = text("""
+            UPDATE exam_sessions 
+            SET overall_score = :score,
+                difficulty_assigned = :diff,
+                time_taken_seconds = :time,
+                rl_action_taken = :action,
+                recommended_next_difficulty = :next_diff,
+                session_status = 'completed',
+                completed_at = NOW()
+            WHERE id = :id
         """)
         
-        self.db.execute(insert, {
+        self.db.execute(update, {
             "id": str(session_id),
-            "u": payload.user_id,
-            "l": payload.language_id,
-            "t": payload.major_topic_id,
-            "st": payload.session_type,
             "score": accuracy,
             "diff": difficulty,
             "time": payload.total_time_seconds,
@@ -844,6 +846,7 @@ class GradingService:
             WHERE user_id = :u 
               AND language_id = :l 
               AND major_topic_id = :m
+              AND session_status = 'completed'
             ORDER BY created_at DESC
             LIMIT :window
         """)

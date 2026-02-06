@@ -58,18 +58,21 @@ CREATE TABLE IF NOT EXISTS user_question_history (
     seen_at TIMESTAMP DEFAULT NOW()
 );
 
--- 5. Exam Sessions (with Phase 2B: Adaptive Difficulty, Phase 2C: Review Type)
+-- 5. Exam Sessions (with Phase 2B: Adaptive Difficulty, Phase 2C: Review Type, Phase 3: Session Lifecycle)
 CREATE TABLE IF NOT EXISTS exam_sessions (
     id VARCHAR PRIMARY KEY,
     user_id VARCHAR REFERENCES users(id) ON DELETE CASCADE,
     language_id VARCHAR NOT NULL,
     major_topic_id VARCHAR NOT NULL,
     session_type VARCHAR DEFAULT 'practice',  -- 'practice', 'diagnostic', 'review'
-    overall_score FLOAT NOT NULL,
-    difficulty_assigned FLOAT NOT NULL,
-    time_taken_seconds INTEGER NOT NULL,
-    rl_action_taken VARCHAR NOT NULL,
+    session_status VARCHAR DEFAULT 'started',  -- 'started', 'completed', 'abandoned'
+    overall_score FLOAT,
+    difficulty_assigned FLOAT,
+    time_taken_seconds INTEGER,
+    rl_action_taken VARCHAR,
     recommended_next_difficulty FLOAT DEFAULT 0.5,
+    started_at TIMESTAMP DEFAULT NOW(),
+    completed_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -85,6 +88,7 @@ CREATE TABLE IF NOT EXISTS exam_details (
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_student_state_user ON student_state(user_id);
 CREATE INDEX IF NOT EXISTS idx_exam_sessions_user ON exam_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_exam_sessions_status ON exam_sessions(session_status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_question_bank_mapping_lang ON question_bank(mapping_id, language_id);
 CREATE INDEX IF NOT EXISTS idx_question_bank_difficulty ON question_bank(difficulty);
 

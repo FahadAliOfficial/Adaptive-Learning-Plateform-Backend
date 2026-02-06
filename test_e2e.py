@@ -54,10 +54,27 @@ else:
     print(f"✗ Recommendation failed: {rec_response.text}")
     exit(1)
 
+# 3.5. START EXAM SESSION
+print("\n3.5. START EXAM SESSION")
+start_response = requests.post(f"{api}/api/exam/start", headers=headers, json={
+    "user_id": user_id,
+    "language_id": "python_3",
+    "major_topic_id": recommended_topic,
+    "session_type": "practice"
+})
+if start_response.status_code == 200:
+    session_data = start_response.json()
+    session_id = session_data["session_id"]
+    print(f"✓ Session started: {session_id}")
+else:
+    print(f"✗ Session start failed: {start_response.text}")
+    exit(1)
+
 # 4. EXAM SUBMISSION
 print("\n4. EXAM SUBMISSION")
 exam_response = requests.post(f"{api}/api/exam/submit", headers=headers, json={
     "user_id": user_id,
+    "session_id": session_id,
     "language_id": "python_3",
     "major_topic_id": recommended_topic,
     "session_type": "practice",
@@ -123,7 +140,8 @@ exam_response = requests.post(f"{api}/api/exam/submit", headers=headers, json={
 if exam_response.status_code == 200:
     exam_data = exam_response.json()
     print(f"✓ Exam submitted successfully")
-    print(f"  Mastery updated: {exam_data.get('updated_mastery', 'N/A')}")
+    print(f"  New mastery: {exam_data.get('new_mastery_score', 'N/A')}")
+    print(f"  Accuracy: {exam_data.get('accuracy', 'N/A')}")
 else:
     print(f"✗ Exam submission failed: {exam_response.text}")
 

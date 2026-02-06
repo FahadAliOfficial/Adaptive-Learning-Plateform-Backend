@@ -9,9 +9,14 @@ from datetime import datetime, timezone
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from typing import Dict, List, Tuple
+import logging
 
 from .schemas import StateVectorRequest, StateVectorResponse
 from .config import get_config
+
+# Configure logging
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 
 class StateVectorGenerator:
@@ -75,37 +80,54 @@ class StateVectorGenerator:
         user_id = request.user_id
         language_id = request.language_id
         
+        logger.info(f"[StateVector] Starting generation for user {user_id[:8]}... language {language_id}")
+        
         # Validate language_id exists in curriculum
         if language_id not in self.config.valid_languages:
+            logger.error(f"[StateVector] Invalid language_id: {language_id}")
             raise ValueError(
                 f"Invalid language_id: {language_id}. "
                 f"Valid languages: {sorted(self.config.valid_languages)}"
             )
         
         # Initialize vector (dynamic dimensions based on curriculum)
+        logger.debug(f"[StateVector] Initializing vector with {self.vector_size} dimensions")
         vector = np.zeros(self.vector_size, dtype=np.float32)
         
         # 1. Language One-Hot Encoding [lang_offset : lang_offset + num_languages]
+        logger.debug(f"[StateVector] Step 1: Language encoding")
         lang_idx = self.languages_order.index(language_id)
         vector[self.lang_offset + lang_idx] = 1.0
         
         # 2. Decayed Mastery Scores [mastery_offset : mastery_offset + num_mappings]
+        logger.debug(f"[StateVector] Step 2: Fetching mastery scores")
         mastery_map = self._get_decayed_mastery(user_id, language_id)
+        logger.debug(f"[StateVector] Got {len(mastery_map)} mastery scores")
         for i, mapping_id in enumerate(self.mappings_order):
             vector[self.mastery_offset + i] = mastery_map.get(mapping_id, 0.0)
         
         # 3. Fluency Scores [fluency_offset : fluency_offset + num_mappings]
+        logger.debug(f"[StateVector] Step 3: Fetching fluency scores")
         fluency_map = self._get_fluency_scores(user_id, language_id)
+        logger.debug(f"[StateVector] Got {len(fluency_map)} fluency scores")
         for i, mapping_id in enumerate(self.mappings_order):
             vector[self.fluency_offset + i] = fluency_map.get(mapping_id, 1.0)  # Default to normal speed
         
         # 4. Confidence Scores [confidence_offset : confidence_offset + num_mappings]
+        logger.debug(f"[StateVector] Step 4: Fetching confidence scores")
         confidence_map = self._get_confidence_scores(user_id, language_id)
+        logger.debug(f"[StateVector] Got {len(confidence_map)} confidence scores")
         for i, mapping_id in enumerate(self.mappings_order):
             vector[self.confidence_offset + i] = confidence_map.get(mapping_id, 0.0)
         
         # 5. Behavioral Metrics [behavioral_offset : behavioral_offset + 9] (includes cold-start + Phase 2B adaptive difficulty)
-        metrics = self._get_behavioral_metrics(user_id, language_id)
+        logger.debug(f"[StateVector] Step 5: Calculating behavioral metrics")
+        try:
+            metrics = self._get_behavioral_metrics(user_id, language_id)
+            logger.debug(f"[StateVector] Metrics: {metrics}")
+        except Exception as e:
+            logger.error(f"[StateVector] ERROR in behavioral metrics: {type(e).__name__}: {str(e)}")
+            raise
         vector[self.behavioral_offset + 0] = metrics['last_accuracy']
         vector[self.behavioral_offset + 1] = metrics['last_difficulty']
         vector[self.behavioral_offset + 2] = metrics['avg_fluency']
@@ -117,7 +139,15 @@ class StateVectorGenerator:
         vector[self.behavioral_offset + 8] = metrics['adaptive_difficulty']  # Phase 2B: Recommended next difficulty
         
         # 6. Generate rich metadata (prerequisites, transfer potential, errors)
-        metadata = self._generate_metadata(vector, user_id, language_id, mastery_map)
+        logger.debug(f"[StateVector] Step 6: Generating metadata")
+        try:
+            metadata = self._generate_metadata(vector, user_id, language_id, mastery_map)
+            logger.debug(f"[StateVector] Metadata generated successfully")
+        except Exception as e:
+            logger.error(f"[StateVector] ERROR in metadata generation: {type(e).__name__}: {str(e)}")
+            raise
+        
+        logger.info(f"[StateVector] Successfully generated {len(vector)} dimension vector")
         
         return StateVectorResponse(
             state_vector=vector.tolist(),
@@ -204,7 +234,7 @@ class StateVectorGenerator:
         last_session_query = text("""
             SELECT overall_score, difficulty_assigned, time_taken_seconds, created_at, recommended_next_difficulty
             FROM exam_sessions 
-            WHERE user_id=:u AND language_id=:l 
+            WHERE user_id=:u AND language_id=:l AND session_status = 'completed'
             ORDER BY created_at DESC 
             LIMIT 1
         """)
@@ -242,7 +272,7 @@ class StateVectorGenerator:
         stability_query = text("""
             SELECT overall_score 
             FROM exam_sessions 
-            WHERE user_id=:u AND language_id=:l 
+            WHERE user_id=:u AND language_id=:l AND session_status = 'completed'
             ORDER BY created_at DESC 
             LIMIT 5
         """)
@@ -381,17 +411,17 @@ class StateVectorGenerator:
         return {
             "user_id": user_id,
             "language": language_id,
-            "strongest_topic": {"id": strongest[0], "mastery": round(strongest[1], 3)},
-            "weakest_topic": {"id": weakest[0], "mastery": round(weakest[1], 3)},
+            "strongest_topic": {"id": strongest[0], "mastery": round(float(strongest[1]), 3)},
+            "weakest_topic": {"id": weakest[0], "mastery": round(float(weakest[1]), 3)},
             "needs_review": needs_review,
-            "overall_mastery_avg": round(np.mean([s for _, s in topic_strengths if s > 0]), 3) if topic_strengths else 0.0,
-            "last_session_accuracy": round(vector[self.behavioral_offset + 0], 3),
-            "average_fluency_ratio": round(vector[self.behavioral_offset + 2], 2),  # NEW: Expose fluency in metadata
-            "stability_score": round(vector[self.behavioral_offset + 3], 3),
+            "overall_mastery_avg": round(float(np.mean([s for _, s in topic_strengths if s > 0]) if any(s > 0 for _, s in topic_strengths) else 0.0), 3),
+            "last_session_accuracy": round(float(vector[self.behavioral_offset + 0]), 3),
+            "average_fluency_ratio": round(float(vector[self.behavioral_offset + 2]), 2),  # NEW: Expose fluency in metadata
+            "stability_score": round(float(vector[self.behavioral_offset + 3]), 3),
             "days_since_practice": int(vector[self.behavioral_offset + 4]),
-            "gate_readiness": round(vector[self.behavioral_offset + 5], 3),
-            "session_confidence": round(vector[self.behavioral_offset + 6], 3),  # Cold-start signal
-            "performance_velocity": round(vector[self.behavioral_offset + 7], 1),  # Fast learner flag
+            "gate_readiness": round(float(vector[self.behavioral_offset + 5]), 3),
+            "session_confidence": round(float(vector[self.behavioral_offset + 6]), 3),  # Cold-start signal
+            "performance_velocity": round(float(vector[self.behavioral_offset + 7]), 1),  # Fast learner flag
             "prerequisites_status": prereq_status,
             "transfer_potential": transfer_potential,
             "recent_error_patterns": error_patterns,
@@ -430,9 +460,9 @@ class StateVectorGenerator:
             avg_strength = total_strength / len(required_prereqs) if required_prereqs else 1.0
             
             prereq_status[mapping_id] = {
-                "all_prerequisites_met": met,
+                "all_prerequisites_met": bool(met),
                 "missing_prerequisites": missing,
-                "prerequisite_strength": round(avg_strength, 3)
+                "prerequisite_strength": round(float(avg_strength), 3)
             }
         
         return prereq_status
@@ -463,10 +493,10 @@ class StateVectorGenerator:
                 
                 transfers.append({
                     "target_language": target,
-                    "logic_acceleration": logic_accel,
-                    "syntax_friction": syntax_friction,
-                    "expected_net_benefit": round(net_benefit, 3),
-                    "recommended": net_benefit > 0.3
+                    "logic_acceleration": float(logic_accel),
+                    "syntax_friction": float(syntax_friction),
+                    "expected_net_benefit": round(float(net_benefit), 3),
+                    "recommended": bool(net_benefit > 0.3)
                 })
         
         # Sort by net benefit
