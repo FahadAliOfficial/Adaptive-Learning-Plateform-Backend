@@ -273,6 +273,6 @@ if __name__ == "__main__":
     print("✅ All tables created successfully")
     print("\nTables:")
     with engine.connect() as conn:
-        result = conn.execute(text("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"))
+        result = conn.execute(text("SELECT table_name FROM information_schema.tables WHERE table_schema='public' ORDER BY table_name"))
         for row in result:
             print(f"  - {row[0]}")

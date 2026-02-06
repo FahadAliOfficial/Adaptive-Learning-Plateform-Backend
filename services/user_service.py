@@ -7,9 +7,11 @@ import uuid
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import Dict, Any
+from datetime import datetime
 
-from .schemas import UserRegistrationPayload, UserRegistrationResponse
+from .schemas import UserRegistrationPayload, UserRegistrationResponse, LoginRequest, LoginResponse, UserProfile
 from .config import get_config
+from .auth import hash_password, verify_password, create_access_token, create_refresh_token
 
 
 class UserService:
@@ -48,8 +50,9 @@ class UserService:
         # 2. Create user record
         user_id = str(uuid.uuid4())
         
-        # NOTE: In production, hash the password using bcrypt/passlib!
-        # For FYP demo, storing plaintext (not secure for production)
+        # Hash the password using bcrypt
+        hashed_password = hash_password(payload.password)
+        
         insert_user = text("""
             INSERT INTO users (id, email, password_hash, last_active_language, created_at)
             VALUES (:id, :email, :password, :language, NOW())
@@ -58,7 +61,7 @@ class UserService:
         self.db.execute(insert_user, {
             "id": user_id,
             "email": payload.email,
-            "password": payload.password,  # Hash this in production!
+            "password": hashed_password,
             "language": payload.language_id
         })
         
@@ -150,3 +153,124 @@ class UserService:
             "starting_topic": self.config.get_major_topic_id(language_id, "UNIV_OOP"),
             "reason": "All topics mastered - review mode"
         }
+    
+    def login_user(self, payload: LoginRequest) -> LoginResponse:
+        """
+        Authenticate user and generate JWT tokens.
+        
+        Args:
+            payload: Login credentials (email, password)
+        
+        Returns:
+            LoginResponse with access and refresh tokens
+        
+        Raises:
+            ValueError: If credentials are invalid
+        """
+        # Fetch user by email
+        query = text("""
+            SELECT id, email, password_hash, last_active_language
+            FROM users
+            WHERE email = :email
+        """)
+        
+        user = self.db.execute(query, {"email": payload.email}).fetchone()
+        
+        if not user:
+            raise ValueError("Invalid email or password")
+        
+        user_id, email, password_hash, last_active_language = user
+        
+        # Verify password
+        if not verify_password(payload.password, password_hash):
+            raise ValueError("Invalid email or password")
+        
+        # Generate JWT tokens
+        token_data = {"sub": user_id, "email": email}
+        access_token = create_access_token(token_data)
+        refresh_token = create_refresh_token({"sub": user_id})
+        
+        return LoginResponse(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            token_type="bearer",
+            user_id=user_id,
+            email=email,
+            last_active_language=last_active_language
+        )
+    
+    def get_user_profile(self, user_id: str) -> UserProfile:
+        """
+        Get user profile data.
+        
+        Args:
+            user_id: User UUID
+        
+        Returns:
+            UserProfile with user details
+        
+        Raises:
+            ValueError: If user not found
+        """
+        query = text("""
+            SELECT id, email, last_active_language, total_exams_taken, created_at
+            FROM users
+            WHERE id = :user_id
+        """)
+        
+        user = self.db.execute(query, {"user_id": user_id}).fetchone()
+        
+        if not user:
+            raise ValueError("User not found")
+        
+        return UserProfile(
+            id=user[0],
+            email=user[1],
+            last_active_language=user[2],
+            total_exams_taken=user[3],
+            created_at=user[4].isoformat() if isinstance(user[4], datetime) else str(user[4])
+        )
+    
+    def change_password(self, user_id: str, current_password: str, new_password: str) -> bool:
+        """
+        Change user password.
+        
+        Args:
+            user_id: User UUID
+            current_password: Current password for verification
+            new_password: New password to set
+        
+        Returns:
+            True if successful
+        
+        Raises:
+            ValueError: If current password is incorrect
+        """
+        # Fetch current password hash
+        query = text("SELECT password_hash FROM users WHERE id = :user_id")
+        result = self.db.execute(query, {"user_id": user_id}).fetchone()
+        
+        if not result:
+            raise ValueError("User not found")
+        
+        password_hash = result[0]
+        
+        # Verify current password
+        if not verify_password(current_password, password_hash):
+            raise ValueError("Current password is incorrect")
+        
+        # Hash new password
+        new_hash = hash_password(new_password)
+        
+        # Update password
+        update_query = text("""
+            UPDATE users
+            SET password_hash = :new_hash
+            WHERE id = :user_id
+        """)
+        
+        self.db.execute(update_query, {"new_hash": new_hash, "user_id": user_id})
+        self.db.commit()
+        
+        return True
+

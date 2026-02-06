@@ -114,3 +114,60 @@ class UserRegistrationResponse(BaseModel):
     starting_topic: str = Field(..., description="Language-specific major_topic_id to start with")
     experience_level: str
 
+
+# ==================== Authentication Schemas ====================
+
+class LoginRequest(BaseModel):
+    """User login request."""
+    email: str = Field(..., description="User email address")
+    password: str = Field(..., description="User password")
+
+    @validator('email')
+    def validate_email(cls, v):
+        if '@' not in v or '.' not in v:
+            raise ValueError('Invalid email format')
+        return v.lower()
+
+
+class LoginResponse(BaseModel):
+    """Response after successful login."""
+    access_token: str = Field(..., description="JWT access token")
+    refresh_token: str = Field(..., description="JWT refresh token for getting new access tokens")
+    token_type: str = Field(default="bearer", description="Token type")
+    user_id: str
+    email: str
+    last_active_language: Optional[str] = None
+
+
+class TokenRefreshRequest(BaseModel):
+    """Request to refresh access token."""
+    refresh_token: str = Field(..., description="Valid refresh token")
+
+
+class TokenRefreshResponse(BaseModel):
+    """Response with new access token."""
+    access_token: str
+    token_type: str = Field(default="bearer")
+
+
+class UserProfile(BaseModel):
+    """User profile data."""
+    id: str
+    email: str
+    last_active_language: Optional[str] = None
+    total_exams_taken: int = 0
+    created_at: str  # ISO format timestamp
+
+
+class PasswordChangeRequest(BaseModel):
+    """Request to change password."""
+    current_password: str = Field(..., description="Current password for verification")
+    new_password: str = Field(..., min_length=6, description="New password")
+
+
+class PasswordChangeResponse(BaseModel):
+    """Response after password change."""
+    success: bool
+    message: str
+
+

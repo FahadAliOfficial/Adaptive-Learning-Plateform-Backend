@@ -20,6 +20,7 @@ from services.state_vector_service import StateVectorGenerator
 from services.user_service import UserService
 from services.review_scheduler import ReviewScheduler
 from services.pattern_analyzer import PatternAnalyzer
+from services.auth import get_current_user, get_current_active_user
 
 # ✅ Import from centralized database.py
 from database import get_db, engine, Base, SessionLocal
@@ -39,13 +40,17 @@ import models.question_bank  # This registers QuestionBank and UserQuestionHisto
 # Import routers
 from routers import question_bank_router
 from routers import analytics_router
+from routers import auth_router
 
-app = FastAPI(title="FYP Backend API - Question Bank", version="2.0")
+app = FastAPI(title="FYP Backend API - Adaptive Learning", version="2.0")
 
 # Rate limiting setup
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Register authentication routes
+app.include_router(auth_router.router)
 
 # Register question bank routes
 app.include_router(question_bank_router.router)
@@ -87,17 +92,28 @@ def get_db_dependency():
 async def submit_exam(
     request: Request,
     payload: ExamSubmissionPayload,
+    current_user: dict = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     """
     Scenario B: Submission Cycle
     Process exam results and update mastery scores.
     
+    **Requires:** Valid JWT access token
+    
     Workflow:
     1. Validate payload (Pydantic handles this)
-    2. Process submission through GradingService
-    3. Return updated mastery + recommendations
+    2. Verify user owns the submission (user_id matches token)
+    3. Process submission through GradingService
+    4. Return updated mastery + recommendations
     """
+    # Verify user_id matches authenticated user
+    if payload.user_id != current_user["id"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot submit exam for another user"
+        )
+    
     try:
         grading_service = GradingService(db)
         result = grading_service.process_submission(payload)
@@ -119,11 +135,14 @@ async def submit_exam(
 @app.post("/api/rl/state-vector", response_model=StateVectorResponse)
 async def get_state_vector(
     request: StateVectorRequest,
+    current_user: dict = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     """
     Scenario A: Request Cycle
     Generate RL state vector for decision-making.
+    
+    **Requires:** Valid JWT access token
     
     Workflow:
     1. Validate user_id and language_id
