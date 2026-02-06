@@ -171,3 +171,46 @@ class PasswordChangeResponse(BaseModel):
     message: str
 
 
+# ==================== RL Recommendation Schemas ====================
+
+class RecommendationRequest(BaseModel):
+    """Request for RL curriculum recommendation."""
+    user_id: str = Field(..., description="User UUID")
+    language_id: Literal["python_3", "javascript_es6", "java_17", "cpp_20", "go_1_21"]
+    strategy: Literal["ppo", "dqn", "a2c", "ensemble", "baseline"] = Field(
+        default="a2c",
+        description="RL model strategy to use for recommendation"
+    )
+    deterministic: bool = Field(
+        default=True,
+        description="Use deterministic policy (True for production, False for exploration)"
+    )
+
+    @validator('user_id')
+    def validate_uuid(cls, v):
+        try:
+            return str(UUID(v))
+        except ValueError:
+            raise ValueError(f'Invalid UUID format for user_id: {v}')
+
+
+class RecommendationResponse(BaseModel):
+    """RL curriculum recommendation response with prerequisite validation."""
+    mapping_id: str = Field(..., description="Universal topic ID (e.g., UNIV_VAR, UNIV_LOOP)")
+    major_topic_id: str = Field(..., description="Language-specific topic ID (e.g., PY_VAR_01)")
+    difficulty: float = Field(..., ge=0.0, le=1.0, description="Recommended difficulty tier")
+    action_id: int = Field(..., description="RL action index (-1 for baseline)")
+    strategy_used: str = Field(..., description="Strategy that generated this recommendation")
+    confidence: Optional[float] = Field(None, description="Confidence score (0-1) for ensemble")
+    metadata: dict = Field(..., description="Additional info: prerequisite checks, violations, etc.")
+
+
+class HealthStatusResponse(BaseModel):
+    """RL service health status."""
+    service: str
+    status: str = Field(..., description="'healthy' or 'degraded'")
+    models_loaded: dict = Field(..., description="Status of each model (ppo, dqn, a2c)")
+    environment_ready: bool
+    available_strategies: List[str]
+
+

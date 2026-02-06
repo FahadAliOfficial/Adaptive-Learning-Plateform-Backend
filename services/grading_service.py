@@ -125,6 +125,13 @@ class GradingService:
             # 8. Store Session History
             session_id = self._save_session_history(payload, accuracy, avg_difficulty, fluency_ratio)
             
+            # 8.5. Mark RL recommendation as followed if this matches recent recommendation
+            self._mark_recommendation_followed(
+                payload.user_id,
+                payload.language_id,
+                payload.major_topic_id
+            )
+            
             # 9. Save Detailed Questions Snapshot with error tracking
             self._save_exam_details(session_id, payload.results)
             
@@ -981,7 +988,7 @@ class GradingService:
                 user_velocity = mastery_delta / time_delta  # mastery points per hour
             else:
                 # Use baseline from config
-                avg_hours = pattern.get('estimated_hours', 5.0)
+                avg_hours = pattern.get('estimated_hours', 5.0) if pattern else 5.0
                 user_velocity = 1.0 / avg_hours
             
             # Confidence increases with more data
@@ -989,7 +996,7 @@ class GradingService:
             confidence = min(session_count / 10.0, 0.95)  # Max 95% confidence after 10+ sessions
         else:
             # No history - use average from config
-            avg_hours = pattern.get('estimated_hours', 5.0)
+            avg_hours = pattern.get('estimated_hours', 5.0) if pattern else 5.0
             user_velocity = None  # No velocity data
             confidence = 0.0  # No confidence without data
         
@@ -998,15 +1005,70 @@ class GradingService:
             estimated_hours = mastery_gap / user_velocity
         else:
             # No velocity data - use baseline from config
-            estimated_hours = pattern.get('estimated_hours', 5.0)
+            estimated_hours = pattern.get('estimated_hours', 5.0) if pattern else 5.0
         
         # Predict sessions (using optimal session length from config)
-        optimal_session_minutes = pattern.get('optimal_session_length_minutes', 45)
+        optimal_session_minutes = pattern.get('optimal_session_length_minutes', 45) if pattern else 45
         estimated_sessions = int((estimated_hours * 60) / optimal_session_minutes) + 1
         
         return {
-            "estimated_hours": round(estimated_hours, 1),
-            "estimated_sessions": estimated_sessions,
-            "current_velocity": round(user_velocity, 3) if user_velocity else None,
-            "confidence": round(confidence, 2)
+            'mapping_id': mapping_id,
+            'current_mastery': current_mastery,
+            'target_mastery': 0.85,
+            'mastery_gap': mastery_gap,
+            'estimated_hours': round(estimated_hours, 1) if mastery_gap > 0 else 0,
+            'estimated_sessions': estimated_sessions if mastery_gap > 0 else 0,
+            'confidence': round(confidence, 2),
+            'user_velocity': round(user_velocity, 4) if user_velocity else None,
+            'pattern_avg_hours': pattern.get('estimated_hours', 5.0) if pattern else 5.0,
+            'session_count': len(sessions)
         }
+    
+    def _mark_recommendation_followed(
+        self,
+        user_id: str,
+        language_id: str,
+        major_topic_id: str
+    ):
+        """
+        Mark the most recent RL recommendation as followed up if it matches this exam submission.
+        Tracks recommendation adherence for effectiveness analysis.
+        
+        Args:
+            user_id: User UUID
+            language_id: Language of the exam
+            major_topic_id: Topic of the exam submission
+        """
+        try:
+            # Find most recent unfollowed recommendation for this major_topic_id
+            # within last 24 hours (to avoid matching old stale recommendations)
+            query = text("""
+                UPDATE rl_recommendation_history
+                SET followed_up = TRUE,
+                    followed_up_at = :now
+                WHERE id = (
+                    SELECT id 
+                    FROM rl_recommendation_history
+                    WHERE user_id = :user_id
+                      AND language_id = :language_id
+                      AND major_topic_id = :major_topic_id
+                      AND followed_up = FALSE
+                      AND created_at > (NOW() - INTERVAL '1 day')
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                )
+            """)
+            
+            result = self.db.execute(query, {
+                'user_id': user_id,
+                'language_id': language_id,
+                'major_topic_id': major_topic_id,
+                'now': datetime.now(timezone.utc)
+            })
+            
+            if result.rowcount > 0:
+                print(f"✅ Marked RL recommendation as followed: {major_topic_id}")
+        
+        except Exception as e:
+            # Don't fail exam submission if recommendation tracking fails
+            print(f"⚠️ Failed to mark recommendation as followed: {e}")

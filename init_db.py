@@ -232,8 +232,31 @@ CREATE TABLE IF NOT EXISTS notification_preferences (
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
+-- 15. RL Recommendation History (Phase 2: Track RL decisions)
+CREATE TABLE IF NOT EXISTS rl_recommendation_history (
+    id VARCHAR PRIMARY KEY,
+    user_id VARCHAR REFERENCES users(id) ON DELETE CASCADE,
+    language_id VARCHAR NOT NULL,
+    strategy VARCHAR NOT NULL,
+    mapping_id VARCHAR NOT NULL,
+    major_topic_id VARCHAR NOT NULL,
+    difficulty FLOAT NOT NULL,
+    action_id INTEGER NOT NULL,
+    confidence FLOAT,
+    prerequisite_check_passed BOOLEAN NOT NULL,
+    metadata JSONB,
+    created_at TIMESTAMP DEFAULT NOW(),
+    followed_up BOOLEAN DEFAULT FALSE,
+    followed_up_at TIMESTAMP
+);
+
 -- Index for user state vectors queries
 CREATE INDEX IF NOT EXISTS idx_user_state_vectors_lookup ON user_state_vectors(user_id, language_id, last_updated DESC);
+
+-- Index for RL recommendation history
+CREATE INDEX IF NOT EXISTS idx_rl_recommendations_user ON rl_recommendation_history(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_rl_recommendations_strategy ON rl_recommendation_history(strategy, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_rl_recommendations_followup ON rl_recommendation_history(user_id, followed_up, created_at DESC);
 
 -- Index for user_question_history
 CREATE INDEX IF NOT EXISTS idx_user_question_history_user ON user_question_history(user_id);

@@ -70,16 +70,25 @@ class ReviewScheduler:
         # 5. Calculate priority (0-5, where 5 is most urgent)
         priority = self._calculate_review_priority(current_mastery, adjusted_interval)
         
-        # 6. Upsert to database
+        # 6. Upsert to database (PostgreSQL syntax)
         review_id = str(uuid.uuid4())
         
         upsert_query = text("""
-            INSERT OR REPLACE INTO review_schedule 
+            INSERT INTO review_schedule 
                 (id, user_id, language_id, mapping_id, current_mastery, 
                  next_review_date, review_interval_days, review_priority, 
                  personal_decay_rate, days_since_last_review, updated_at)
             VALUES 
                 (:id, :u, :l, :m, :mastery, :next, :interval, :priority, :decay, 0, CURRENT_TIMESTAMP)
+            ON CONFLICT (user_id, language_id, mapping_id) 
+            DO UPDATE SET
+                current_mastery = EXCLUDED.current_mastery,
+                next_review_date = EXCLUDED.next_review_date,
+                review_interval_days = EXCLUDED.review_interval_days,
+                review_priority = EXCLUDED.review_priority,
+                personal_decay_rate = EXCLUDED.personal_decay_rate,
+                days_since_last_review = 0,
+                updated_at = CURRENT_TIMESTAMP
         """)
         
         self.db.execute(upsert_query, {

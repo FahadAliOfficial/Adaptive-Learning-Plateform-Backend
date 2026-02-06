@@ -41,6 +41,7 @@ import models.question_bank  # This registers QuestionBank and UserQuestionHisto
 from routers import question_bank_router
 from routers import analytics_router
 from routers import auth_router
+from routers import rl_router
 
 app = FastAPI(title="FYP Backend API - Adaptive Learning", version="2.0")
 
@@ -58,15 +59,31 @@ app.include_router(question_bank_router.router)
 # Register analytics routes
 app.include_router(analytics_router.router)
 
+# Register RL routes
+app.include_router(rl_router.router)
+
 
 @app.on_event("startup")
 async def startup():
     """
-    Initialize database tables on startup.
+    Initialize database tables and load RL models on startup.
     Only creates tables if they don't exist (safe for production).
     """
     Base.metadata.create_all(bind=engine)
     print("✅ Database tables initialized (QuestionBank, UserQuestionHistory)")
+    
+    # Load RL models
+    print("\n🤖 Loading RL models...")
+    from services.rl.rl_service import get_rl_service
+    rl_service = get_rl_service()
+    load_status = rl_service.load_models(device="auto")
+    
+    if all(load_status.values()):
+        print("✅ All RL models loaded successfully")
+    elif any(load_status.values()):
+        print("⚠️ Some RL models loaded - baseline fallback available")
+    else:
+        print("⚠️ No RL models loaded - using baseline only")
 
 
 # Dependency: Database Session
@@ -178,10 +195,13 @@ async def get_due_reviews(
     request: Request,
     user_id: str,
     language_id: str = None,
+    current_user: dict = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     """
     Phase 2C: Get all reviews due for a user.
+    
+    **Requires:** Valid JWT access token
     
     Returns topics that need review based on spaced repetition schedule.
     Sorted by priority (most urgent first), then by date.
@@ -205,6 +225,13 @@ async def get_due_reviews(
             ]
         }
     """
+    # Verify user can only access their own data
+    if user_id != current_user["id"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot access other user's review schedule"
+        )
+    
     try:
         scheduler = ReviewScheduler(db)
         due_reviews = scheduler.get_due_reviews(user_id, language_id)
@@ -230,10 +257,13 @@ async def get_upcoming_reviews(
     user_id: str,
     language_id: str = None,
     days_ahead: int = 7,
+    current_user: dict = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     """
     Phase 2C: Get reviews scheduled in the next N days.
+    
+    **Requires:** Valid JWT access token
     
     Helps users plan their study schedule by showing upcoming reviews.
     
@@ -257,6 +287,13 @@ async def get_upcoming_reviews(
             ]
         }
     """
+    # Verify user can only access their own data
+    if user_id != current_user["id"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot access other user's review schedule"
+        )
+    
     try:
         scheduler = ReviewScheduler(db)
         upcoming = scheduler.get_upcoming_reviews(user_id, language_id, days_ahead)
@@ -283,10 +320,13 @@ async def get_error_patterns(
     user_id: str,
     language_id: str,
     window_size: int = 50,
+    current_user: dict = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     """
     Phase 2D: Get advanced error pattern analysis for a user.
+    
+    **Requires:** Valid JWT access token
     
     Returns personalized error insights, trends, and remediation plan.
     Uses hybrid scoring: frequency × severity for prioritization.
@@ -318,6 +358,13 @@ async def get_error_patterns(
             "total_errors_analyzed": 45
         }
     """
+    # Verify user can only access their own data
+    if user_id != current_user["id"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot access other user's error patterns"
+        )
+    
     try:
         analyzer = PatternAnalyzer(db)
         analysis = analyzer.analyze_user_patterns(user_id, language_id, window_size)
@@ -341,10 +388,13 @@ async def get_progress_prediction(
     user_id: str,
     language_id: str,
     mapping_id: str,
+    current_user: dict = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     """
     Phase 2B Feature #17: Get time-to-mastery prediction for a topic.
+    
+    **Requires:** Valid JWT access token
     
     Returns estimated hours and sessions needed to reach 0.75 mastery,
     based on user's learning velocity and config baselines.
@@ -365,6 +415,13 @@ async def get_progress_prediction(
             }
         }
     """
+    # Verify user can only access their own data
+    if user_id != current_user["id"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot access other user's progress predictions"
+        )
+    
     try:
         from services.grading_service import GradingService
         
