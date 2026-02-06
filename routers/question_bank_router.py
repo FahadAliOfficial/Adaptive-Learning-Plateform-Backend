@@ -2,7 +2,7 @@
 Question Bank API Endpoints
 Provides REST API for question generation, selection, and admin review.
 """
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status, Request
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict
@@ -14,9 +14,13 @@ from models.question_bank import QuestionBank, UserQuestionHistory
 from services.content_engine.openai_factory import OpenAIFactory
 from services.content_engine.selector import QuestionSelector
 from services.content_engine.validator import MultiLanguageValidator
+from services.auth import get_current_active_user, get_current_admin_user
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 
 router = APIRouter(prefix="/question-bank", tags=["Question Bank"])
+limiter = Limiter(key_func=get_remote_address)
 
 
 # ==================== REQUEST/RESPONSE SCHEMAS ====================
@@ -108,6 +112,46 @@ class AdminReviewResponse(BaseModel):
     question_id: str
     action: str
     message: str
+
+
+class QuestionReportRequest(BaseModel):
+    """Request to report a problematic question."""
+    question_id: str = Field(..., description="ID of the question being reported")
+    report_reason: str = Field(..., description="Category: incorrect_answer, typo, unclear, outdated, offensive")
+    description: Optional[str] = Field(None, max_length=500, description="Detailed description of the issue")
+
+
+class QuestionReportResponse(BaseModel):
+    """Response from question report."""
+    report_id: str
+    message: str
+    status: str = "pending"
+
+
+class QuestionAnalyticsResponse(BaseModel):
+    """Analytics for a specific question."""
+    question_id: str
+    usage_count: int
+    total_attempts: int
+    correct_attempts: int
+    accuracy_rate: float
+    avg_time_spent: float
+    difficulty_rating: float
+    quality_score: float
+    is_verified: bool
+    created_at: str
+    last_used_at: Optional[str] = None
+
+
+class QuestionAnalyticsSummaryResponse(BaseModel):
+    """Summary analytics across all questions."""
+    total_questions: int
+    verified_count: int
+    unverified_count: int
+    total_usage: int
+    avg_accuracy_rate: float
+    questions_needing_review: int
+    low_quality_questions: List[str] = Field(description="Question IDs with quality  < 0.5")
 
 
 # ==================== BACKGROUND TASKS ====================
@@ -222,9 +266,12 @@ def _background_generate(
 # ==================== API ENDPOINTS ====================
 
 @router.post("/generate", response_model=GenerateResponse, status_code=status.HTTP_202_ACCEPTED)
+@limiter.limit("50/minute")
 async def generate_questions(
-    request: GenerateRequest,
+    req: Request,
+    payload: GenerateRequest,
     background_tasks: BackgroundTasks,
+    current_user: dict = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -237,10 +284,10 @@ async def generate_questions(
     Rate Limiting: 50 requests/minute per IP
     """
     # Validate inputs
-    if request.language_id not in ["python_3", "javascript_es6", "java_17", "cpp_20", "go_1_21"]:
+    if payload.language_id not in ["python_3", "javascript_es6", "java_17", "cpp_20", "go_1_21"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unsupported language: {request.language_id}"
+            detail=f"Unsupported language: {payload.language_id}"
         )
     
     # Generate task ID
@@ -249,28 +296,29 @@ async def generate_questions(
     # Schedule background generation
     background_tasks.add_task(
         _background_generate,
-        topic=request.topic,
-        language_id=request.language_id,
-        mapping_id=request.mapping_id,
-        difficulty=request.difficulty,
-        count=request.count,
-        sub_topic=request.sub_topic,
+        topic=payload.topic,
+        language_id=payload.language_id,
+        mapping_id=payload.mapping_id,
+        difficulty=payload.difficulty,
+        count=payload.count,
+        sub_topic=payload.sub_topic,
         task_id=task_id
     )
     
     # Estimate time (1-2 seconds per question with OpenAI API)
-    estimated_time = request.count * 1.5
+    estimated_time = payload.count * 1.5
     
     return GenerateResponse(
         task_id=task_id,
-        message=f"Generation started. Creating {request.count} questions for '{request.topic}'.",
+        message=f"Generation started. Creating {payload.count} questions for '{payload.topic}'.",
         estimated_time_seconds=int(estimated_time)
     )
 
 
 @router.post("/select", response_model=SelectResponse)
 async def select_questions(
-    request: SelectRequest,
+    payload: SelectRequest,
+    current_user: dict = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -287,20 +335,20 @@ async def select_questions(
     
     # Select questions
     questions = selector.select_questions(
-        user_id=request.user_id,
-        language_id=request.language_id,
-        mapping_id=request.mapping_id,
-        target_difficulty=request.target_difficulty,
-        count=request.count,
-        difficulty_tolerance=request.difficulty_tolerance
+        user_id=payload.user_id,
+        language_id=payload.language_id,
+        mapping_id=payload.mapping_id,
+        target_difficulty=payload.target_difficulty,
+        count=payload.count,
+        difficulty_tolerance=payload.difficulty_tolerance
     )
     
     # Get warehouse status for this topic
     warehouse_status = selector.get_warehouse_status(
-        language_id=request.language_id,
-        mapping_id=request.mapping_id,
-        difficulty=request.target_difficulty,
-        difficulty_tolerance=request.difficulty_tolerance
+        language_id=payload.language_id,
+        mapping_id=payload.mapping_id,
+        difficulty=payload.target_difficulty,
+        difficulty_tolerance=payload.difficulty_tolerance
     )
     
     return SelectResponse(
@@ -387,7 +435,8 @@ async def get_warehouse_status(
 
 @router.post("/admin/review", response_model=AdminReviewResponse)
 async def admin_review_question(
-    request: AdminReviewRequest,
+    payload: AdminReviewRequest,
+    current_user: dict = Depends(get_current_admin_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -397,44 +446,44 @@ async def admin_review_question(
     - 'approve': Mark as verified (can be used in exams)
     - 'reject': Delete from database
     
-    Requires admin authentication (TODO: Add auth middleware)
+    Requires admin authentication.
     """
     # Get question
     question = db.query(QuestionBank).filter(
-        QuestionBank.id == request.question_id
+        QuestionBank.id == payload.question_id
     ).first()
     
     if not question:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Question {request.question_id} not found"
+            detail=f"Question {payload.question_id} not found"
         )
     
-    if request.action == "approve":
+    if payload.action == "approve":
         question.is_verified = True
-        question.review_notes = request.reviewer_notes
+        question.review_notes = payload.reviewer_notes
         db.commit()
         
         return AdminReviewResponse(
-            question_id=request.question_id,
+            question_id=payload.question_id,
             action="approve",
-            message=f"Question {request.question_id[:8]} approved and verified"
+            message=f"Question {payload.question_id[:8]} approved and verified"
         )
     
-    elif request.action == "reject":
+    elif payload.action == "reject":
         db.delete(question)
         db.commit()
         
         return AdminReviewResponse(
-            question_id=request.question_id,
+            question_id=payload.question_id,
             action="reject",
-            message=f"Question {request.question_id[:8]} rejected and deleted"
+            message=f"Question {payload.question_id[:8]} rejected and deleted"
         )
     
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid action: {request.action}. Use 'approve' or 'reject'"
+            detail=f"Invalid action: {payload.action}. Use 'approve' or 'reject'"
         )
 
 
@@ -484,3 +533,211 @@ async def get_pending_questions(
             for q in questions
         ]
     }
+
+
+@router.post("/report", response_model=QuestionReportResponse)
+async def report_question(
+    payload: QuestionReportRequest,
+    current_user: dict = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Report a problematic question.
+    
+    Users can report questions for:
+    - incorrect_answer: Answer key is wrong
+    - typo: Spelling or grammar errors
+    - unclear: Question is confusing or ambiguous
+    - outdated: Uses deprecated syntax/features
+    - offensive: Inappropriate content
+    
+    Requires authentication.
+    """
+    from sqlalchemy import text
+    
+    # Validate question exists
+    question = db.query(QuestionBank).filter(
+        QuestionBank.id == payload.question_id
+    ).first()
+    
+    if not question:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Question {payload.question_id} not found"
+        )
+    
+    # Validate report reason
+    valid_reasons = ["incorrect_answer", "typo", "unclear", "outdated", "offensive"]
+    if payload.report_reason not in valid_reasons:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid report reason. Must be one of: {', '.join(valid_reasons)}"
+        )
+    
+    # Create report
+    report_id = str(uuid.uuid4())
+    
+    db.execute(text("""
+        INSERT INTO question_reports (
+            id, question_id, reported_by, report_reason, description, status, created_at
+        ) VALUES (
+            :id, :question_id, :reported_by, :reason, :description, 'pending', NOW()
+        )
+    """), {
+        "id": report_id,
+        "question_id": payload.question_id,
+        "reported_by": current_user["id"],
+        "reason": payload.report_reason,
+        "description": payload.description
+    })
+    
+    db.commit()
+    
+    return QuestionReportResponse(
+        report_id=report_id,
+        message=f"Question reported successfully. Report ID: {report_id[:8]}...",
+        status="pending"
+    )
+
+
+@router.get("/analytics/{question_id}", response_model=QuestionAnalyticsResponse)
+async def get_question_analytics(
+    question_id: str,
+    current_user: dict = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get analytics for a specific question.
+    
+    Returns:
+    - Usage statistics (how many times used)
+    - Accuracy rate (% of students who got it correct)
+    - Average time spent
+    - Quality metrics
+    
+    Requires authentication.
+    """
+    from sqlalchemy import text, func
+    
+    # Get question
+    question = db.query(QuestionBank).filter(
+        QuestionBank.id == question_id
+    ).first()
+    
+    if not question:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Question {question_id} not found"
+        )
+    
+    # Get usage statistics from user_question_history
+    usage_stats = db.execute(text("""
+        SELECT 
+            COUNT(*) as usage_count,
+            SUM(CASE WHEN was_correct THEN 1 ELSE 0 END) as correct_count,
+            AVG(time_spent_seconds) as avg_time,
+            MAX(attempted_at) as last_used
+        FROM user_question_history
+        WHERE question_id = :qid
+    """), {"qid": question_id}).fetchone()
+    
+    usage_count = usage_stats[0] or 0
+    correct_count = usage_stats[1] or 0
+    avg_time = float(usage_stats[2]) if usage_stats[2] else 0.0
+    last_used = usage_stats[3]
+    
+    accuracy_rate = (correct_count / usage_count * 100) if usage_count > 0 else 0.0
+    
+    return QuestionAnalyticsResponse(
+        question_id=question_id,
+        usage_count=usage_count,
+        total_attempts=usage_count,
+        correct_attempts=correct_count,
+        accuracy_rate=round(accuracy_rate, 2),
+        avg_time_spent=round(avg_time, 2),
+        difficulty_rating=question.difficulty,
+        quality_score=question.quality_score or 0.5,
+        is_verified=question.is_verified,
+        created_at=question.created_at.isoformat() if question.created_at else "",
+        last_used_at=last_used.isoformat() if last_used else None
+    )
+
+
+@router.get("/analytics/summary", response_model=QuestionAnalyticsSummaryResponse)
+async def get_question_analytics_summary(
+    language_id: Optional[str] = None,
+    mapping_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get summary analytics across all questions.
+    
+    Optional filters:
+    - language_id: Filter by programming language
+    - mapping_id: Filter by curriculum topic
+    
+    Requires admin authentication.
+    """
+    from sqlalchemy import text
+    
+    # Build query with optional filters
+    filter_clause = ""
+    params = {}
+    
+    if language_id:
+        filter_clause += " AND q.language_id = :lang_id"
+        params["lang_id"] = language_id
+    
+    if mapping_id:
+        filter_clause += " AND q.mapping_id = :map_id"
+        params["map_id"] = mapping_id
+    
+    # Get summary statistics
+    summary = db.execute(text(f"""
+        SELECT 
+            COUNT(*) as total_questions,
+            SUM(CASE WHEN is_verified THEN 1 ELSE 0 END) as verified_count,
+            SUM(CASE WHEN NOT is_verified THEN 1 ELSE 0 END) as unverified_count
+        FROM question_bank q
+        WHERE 1=1 {filter_clause}
+    """), params).fetchone()
+    
+    # Get usage statistics
+    usage = db.execute(text(f"""
+        SELECT 
+            COUNT(DISTINCT h.question_id) as used_questions,
+            COUNT(*) as total_usage,
+            AVG(CASE WHEN h.was_correct THEN 100.0 ELSE 0.0 END) as avg_accuracy
+        FROM user_question_history h
+        JOIN question_bank q ON h.question_id = q.id
+        WHERE 1=1 {filter_clause}
+    """), params).fetchone()
+    
+    # Get low quality questions (quality score < 0.5)
+    low_quality = db.execute(text(f"""
+        SELECT id
+        FROM question_bank q
+        WHERE quality_score < 0.5 {filter_clause}
+        ORDER BY quality_score ASC
+        LIMIT 10
+    """), params).fetchall()
+    
+    # Get questions needing review (unverified or reported)
+    needs_review = db.execute(text(f"""
+        SELECT COUNT(DISTINCT q.id)
+        FROM question_bank q
+        LEFT JOIN question_reports r ON q.id = r.question_id AND r.status = 'pending'
+        WHERE (q.is_verified = FALSE OR r.id IS NOT NULL) {filter_clause}
+    """), params).fetchone()
+    
+    return QuestionAnalyticsSummaryResponse(
+        total_questions=summary[0] or 0,
+        verified_count=summary[1] or 0,
+        unverified_count=summary[2] or 0,
+        total_usage=usage[1] or 0,
+        avg_accuracy_rate=round(usage[2] or 0.0, 2),
+        questions_needing_review=needs_review[0] or 0,
+        low_quality_questions=[row[0] for row in low_quality]
+    )
+
