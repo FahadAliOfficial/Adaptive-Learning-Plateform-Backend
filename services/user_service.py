@@ -183,7 +183,7 @@ class UserService:
         """
         # Fetch user by email
         query = text("""
-            SELECT id, email, password_hash, last_active_language, is_admin
+            SELECT id, email, password_hash, last_active_language, is_admin, COALESCE(status, 'active') as status
             FROM users
             WHERE email = :email
         """)
@@ -193,7 +193,10 @@ class UserService:
         if not user:
             raise ValueError("Invalid email or password")
         
-        user_id, email, password_hash, last_active_language, is_admin = user
+        user_id, email, password_hash, last_active_language, is_admin, status = user
+
+        if status != "active":
+            raise ValueError(f"ACCOUNT_STATUS:{status}")
         
         # Verify password
         if not verify_password(payload.password, password_hash):
@@ -211,7 +214,8 @@ class UserService:
             user_id=user_id,
             email=email,
             last_active_language=last_active_language,
-            is_admin=is_admin
+            is_admin=is_admin,
+            status=status
         )
     
     def get_user_profile(self, user_id: str) -> UserProfile:
@@ -308,11 +312,7 @@ class UserService:
                 u.created_at,
                 u.last_active_language,
                 u.total_exams_taken,
-                CASE 
-                    WHEN es_recent.last_session_date >= NOW() - INTERVAL '30 days' THEN 'active'
-                    WHEN es_recent.last_session_date IS NOT NULL THEN 'inactive'
-                    ELSE 'inactive'
-                END as status,
+                COALESCE(u.status, 'active') as status,
                 COALESCE(es_recent.last_session_date, u.created_at) as last_active,
                 COALESCE(completed_sessions.session_count, 0) as sessions_completed,
                 COALESCE(avg_mastery.avg_mastery_score, 0.0) as avg_mastery_score
@@ -351,14 +351,7 @@ class UserService:
             params["search"] = f"%{search_query}%"
         
         if status_filter and status_filter != "all":
-            # Add status filter to HAVING clause since status is calculated
-            where_conditions.append("""
-                CASE 
-                    WHEN es_recent.last_session_date >= NOW() - INTERVAL '30 days' THEN 'active'
-                    WHEN es_recent.last_session_date IS NOT NULL THEN 'inactive'
-                    ELSE 'inactive'
-                END = :status_filter
-            """)
+            where_conditions.append("COALESCE(u.status, 'active') = :status_filter")
             params["status_filter"] = status_filter
         
         if where_conditions:
@@ -390,30 +383,12 @@ class UserService:
         
         # Get count statistics separately to avoid complex grouping
         stats_query = """
-            WITH user_stats as (
-                SELECT 
-                    u.id,
-                    CASE 
-                        WHEN es_recent.last_session_date >= NOW() - INTERVAL '30 days' THEN 'active'
-                        WHEN es_recent.last_session_date IS NOT NULL THEN 'inactive'
-                        ELSE 'inactive'
-                    END as status
-                FROM users u
-                LEFT JOIN (
-                    SELECT 
-                        user_id,
-                        MAX(completed_at) as last_session_date
-                    FROM exam_sessions 
-                    WHERE session_status = 'completed' 
-                    GROUP BY user_id
-                ) es_recent ON u.id = es_recent.user_id
-            )
             SELECT 
                 COUNT(*) as total_count,
-                COUNT(CASE WHEN status = 'active' THEN 1 END) as active_count,
-                COUNT(CASE WHEN status = 'inactive' THEN 1 END) as inactive_count,
-                COUNT(CASE WHEN status = 'suspended' THEN 1 END) as suspended_count
-            FROM user_stats
+                COUNT(CASE WHEN COALESCE(status, 'active') = 'active' THEN 1 END) as active_count,
+                COUNT(CASE WHEN COALESCE(status, 'active') = 'inactive' THEN 1 END) as inactive_count,
+                COUNT(CASE WHEN COALESCE(status, 'active') = 'suspended' THEN 1 END) as suspended_count
+            FROM users
         """
         
         stats_result = self.db.execute(text(stats_query)).fetchone()
@@ -430,9 +405,6 @@ class UserService:
         """
         Update user status for admin management.
         
-        Note: Currently this is a placeholder since the users table doesn't have a status column.
-        In production, you would add a status column or use a separate user_status table.
-        
         Args:
             user_id: User UUID
             new_status: New status (active, inactive, suspended)
@@ -443,36 +415,18 @@ class UserService:
         Raises:
             ValueError: If user not found
         """
-        # For now, since we don't have a status column, we simulate the update
-        # In production, you would add: ALTER TABLE users ADD COLUMN status VARCHAR DEFAULT 'active';
-        # Then execute: UPDATE users SET status = :status WHERE id = :user_id
+        allowed_statuses = {"active", "inactive", "suspended"}
+        if new_status not in allowed_statuses:
+            raise ValueError(f"Invalid status '{new_status}'. Must be one of: {', '.join(sorted(allowed_statuses))}")
         
-        # Verify user exists
-        check_user = text("SELECT id, email, created_at FROM users WHERE id = :user_id")
-        user = self.db.execute(check_user, {"user_id": user_id}).fetchone()
-        
-        if not user:
+        update_status = text("UPDATE users SET status = :status WHERE id = :user_id")
+        result = self.db.execute(update_status, {"status": new_status, "user_id": user_id})
+        if result.rowcount == 0:
+            self.db.rollback()
             raise ValueError("User not found")
         
-        # In production, uncomment these lines after adding status column:
-        # update_status = text("UPDATE users SET status = :status WHERE id = :user_id")
-        # self.db.execute(update_status, {"status": new_status, "user_id": user_id})
-        # self.db.commit()
-        
-        # Return updated user data (simulated for now)
-        name = user[1].split('@')[0].replace('.', ' ').title()
-        
-        return {
-            "id": user[0],
-            "email": user[1],
-            "name": name,
-            "status": new_status,  # This would come from the database in production
-            "language": "Not Set",
-            "joinedAt": user[2].isoformat() if user[2] else None,
-            "lastActive": None,
-            "sessionsCompleted": 0,
-            "avgMastery": 0.0
-        }
+        self.db.commit()
+        return self._get_admin_user_data(user_id)
     
     def get_user_analytics_admin(self) -> Dict[str, Any]:
         """
@@ -489,11 +443,7 @@ class UserService:
                     u.email,
                     u.created_at,
                     u.last_active_language,
-                    CASE 
-                        WHEN es_recent.last_session_date >= NOW() - INTERVAL '30 days' THEN 'active'
-                        WHEN es_recent.last_session_date IS NOT NULL THEN 'inactive'
-                        ELSE 'inactive'
-                    END as status,
+                    COALESCE(u.status, 'active') as status,
                     COALESCE(completed_sessions.session_count, 0) as sessions_completed,
                     COALESCE(avg_mastery.avg_mastery_score, 0.0) as avg_mastery_score
                 FROM users u
@@ -572,5 +522,233 @@ class UserService:
             "avg_mastery_across_platform": round(float(analytics_result[7]) * 100, 1) if analytics_result[7] else 0.0,
             "most_popular_language": most_popular_language,
             "languages_distribution": languages_distribution
+        }
+    
+    def update_user_details_admin(self, user_id: str, request) -> Dict[str, Any]:
+        """
+        Update user details (admin only).
+        
+        Admin can update:
+        - Display name
+        - Language preference
+        - Email (though usually restricted)
+        """
+        try:
+            # Check if user exists
+            check_user = text("SELECT id, email FROM users WHERE id = :user_id")
+            user = self.db.execute(check_user, {"user_id": user_id}).fetchone()
+            if not user:
+                raise ValueError(f"User with ID {user_id} not found")
+            
+            # Prepare update fields
+            update_fields = []
+            update_params = {"user_id": user_id}
+            
+            if hasattr(request, 'name') and request.name is not None:
+                update_fields.append("name = :name")
+                update_params["name"] = request.name
+            
+            if hasattr(request, 'language') and request.language is not None:
+                update_fields.append("last_active_language = :language")
+                update_params["language"] = request.language if request.language else None
+            
+            if hasattr(request, 'email') and request.email is not None:
+                # Email updates are usually restricted, but include for completeness
+                # Check if new email is already in use
+                check_email = text("SELECT id FROM users WHERE email = :email AND id != :user_id")
+                existing = self.db.execute(check_email, {"email": request.email, "user_id": user_id}).fetchone()
+                if existing:
+                    raise ValueError(f"Email '{request.email}' is already in use by another user")
+                
+                update_fields.append("email = :email")
+                update_params["email"] = request.email
+            
+            if not update_fields:
+                raise ValueError("No valid fields provided for update")
+            
+            # Execute update
+            update_query = f"""
+                UPDATE users 
+                SET {', '.join(update_fields)}
+                WHERE id = :user_id
+            """
+            
+            self.db.execute(text(update_query), update_params)
+            self.db.commit()
+            
+            # Return updated user data
+            return self._get_admin_user_data(user_id)
+            
+        except Exception as e:
+            self.db.rollback()
+            raise Exception(f"Failed to update user details: {str(e)}")
+    
+    def reset_user_password_admin(self, user_id: str, new_password: str) -> None:
+        """
+        Reset a user's password (admin only).
+        
+        This allows admin to set a new password for users who are locked out
+        or need password assistance.
+        """
+        try:
+            # Check if user exists
+            check_user = text("SELECT id FROM users WHERE id = :user_id")
+            user = self.db.execute(check_user, {"user_id": user_id}).fetchone()
+            if not user:
+                raise ValueError(f"User with ID {user_id} not found")
+            
+            # Hash the new password
+            hashed_password = hash_password(new_password)
+            
+            # Update password
+            update_password = text("""
+                UPDATE users 
+                SET password_hash = :hashed_password
+                WHERE id = :user_id
+            """)
+            
+            self.db.execute(update_password, {
+                "hashed_password": hashed_password,
+                "user_id": user_id
+            })
+            self.db.commit()
+            
+        except Exception as e:
+            self.db.rollback()
+            raise Exception(f"Failed to reset password: {str(e)}")
+    
+    def delete_user_admin(self, user_id: str) -> None:
+        """
+        Permanently delete a user account and all associated data (admin only).
+        
+        WARNING: This action is irreversible and will delete:
+        - User account
+        - All learning progress (student_state)
+        - All practice sessions
+        - All associated data
+        
+        Use with extreme caution.
+        """
+        # Start a new transaction to ensure clean state
+        self.db.rollback()  # Clear any existing transaction state
+        
+        try:
+            # Check if user exists
+            check_user = text("SELECT id, email FROM users WHERE id = :user_id")
+            user = self.db.execute(check_user, {"user_id": user_id}).fetchone()
+            if not user:
+                raise ValueError(f"User with ID {user_id} not found")
+            
+            # Delete in order to maintain referential integrity
+            # Use separate try-catch for each deletion to handle missing tables gracefully
+            
+            # 1. Delete student_state records
+            try:
+                delete_state = text("DELETE FROM student_state WHERE user_id = :user_id")
+                result = self.db.execute(delete_state, {"user_id": user_id})
+                print(f"Deleted {result.rowcount} student_state records")
+            except Exception as e:
+                print(f"Note: student_state deletion issue (table may not exist): {e}")
+                # Rollback and start fresh transaction
+                self.db.rollback()
+            
+            # 2. Delete practice sessions (if table exists)
+            try:
+                delete_sessions = text("DELETE FROM practice_sessions WHERE user_id = :user_id")
+                result = self.db.execute(delete_sessions, {"user_id": user_id})
+                print(f"Deleted {result.rowcount} practice session records")
+            except Exception as e:
+                print(f"Note: practice_sessions deletion issue (table may not exist): {e}")
+                # Rollback and start fresh transaction
+                self.db.rollback()
+            
+            # 3. Delete any RL model data (if exists)
+            try:
+                delete_rl_data = text("""
+                    DELETE FROM rl_model_states WHERE user_id = :user_id;
+                    DELETE FROM rl_training_data WHERE user_id = :user_id;
+                """)
+                self.db.execute(delete_rl_data, {"user_id": user_id})
+            except Exception as e:
+                print(f"Note: RL data deletion issue (tables may not exist): {e}")
+                # Rollback and start fresh transaction
+                self.db.rollback()
+            
+            # 4. Finally, delete user record (this should always work)
+            try:
+                delete_user = text("DELETE FROM users WHERE id = :user_id")
+                result = self.db.execute(delete_user, {"user_id": user_id})
+                if result.rowcount == 0:
+                    raise ValueError(f"User {user_id} was not found for deletion")
+                print(f"Successfully deleted user record")
+                self.db.commit()
+                
+            except Exception as e:
+                self.db.rollback()
+                raise Exception(f"Failed to delete user record: {str(e)}")
+            
+        except ValueError as ve:
+            # User not found - this is expected in some cases
+            self.db.rollback()
+            raise ve
+        except Exception as e:
+            # Unexpected error
+            self.db.rollback()
+            raise Exception(f"Failed to delete user: {str(e)}")
+    
+    def _get_admin_user_data(self, user_id: str) -> Dict[str, Any]:
+        """
+        Helper method to get formatted user data for admin responses.
+        """
+        query = text("""
+            SELECT 
+                u.id,
+                u.email,
+                SPLIT_PART(u.email, '@', 1) as name,
+                COALESCE(u.status, 'active') as status,
+                u.last_active_language as language,
+                u.created_at,
+                COALESCE(es_recent.last_session_date, u.created_at) as last_active,
+                COALESCE(completed_sessions.session_count, 0) as sessions_completed,
+                COALESCE(avg_mastery.avg_mastery_score, 0.0) as avg_mastery
+            FROM users u
+            LEFT JOIN (
+                SELECT 
+                    user_id,
+                    MAX(completed_at) as last_session_date
+                FROM exam_sessions
+                WHERE session_status = 'completed'
+                GROUP BY user_id
+            ) es_recent ON u.id = es_recent.user_id
+            LEFT JOIN (
+                SELECT user_id, COUNT(*) as session_count
+                FROM exam_sessions
+                WHERE session_status = 'completed'
+                GROUP BY user_id
+            ) completed_sessions ON u.id = completed_sessions.user_id
+            LEFT JOIN (
+                SELECT user_id, AVG(mastery_score) as avg_mastery_score
+                FROM student_state
+                WHERE user_id = :user_id
+                GROUP BY user_id
+            ) avg_mastery ON u.id = avg_mastery.user_id
+            WHERE u.id = :user_id
+        """)
+        
+        result = self.db.execute(query, {"user_id": user_id}).fetchone()
+        
+        if not result:
+            raise ValueError(f"User with ID {user_id} not found")
+        
+        return {
+            "id": result[0],
+            "email": result[1],
+            "name": result[2],
+            "status": result[3],
+            "language": result[4],
+            "joinedAt": result[5].isoformat() if result[5] else "",
+            "lastActive": result[6].isoformat() if result[6] else None,
+            "sessionsCompleted": int(result[7]),
+            "avgMastery": round(float(result[8]) * 100, 1) if result[8] else 0.0
         }
 

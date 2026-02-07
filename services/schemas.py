@@ -220,6 +220,7 @@ class LoginResponse(BaseModel):
     email: str
     last_active_language: Optional[str] = None
     is_admin: bool = Field(default=False, description="Whether user has admin privileges")
+    status: Literal["active", "inactive", "suspended"] = Field(default="active", description="Account status")
 
 
 class TokenRefreshRequest(BaseModel):
@@ -352,5 +353,30 @@ class AdminUserAnalytics(BaseModel):
     avg_mastery_across_platform: float
     most_popular_language: str
     languages_distribution: dict = Field(..., description="Language usage distribution")
+
+
+class AdminUserUpdateRequest(BaseModel):
+    """Request to update user details."""
+    name: Optional[str] = Field(None, description="Updated user display name")
+    language: Optional[str] = Field(None, description="Updated language preference")
+    email: Optional[str] = Field(None, description="Updated email (usually not allowed)")
+
+
+class AdminUserUpdateResponse(BaseModel):
+    """Response after updating user details."""
+    success: bool = True
+    message: str
+    updated_user: AdminUser
+
+
+class AdminPasswordResetRequest(BaseModel):
+    """Request to reset user password."""
+    new_password: str = Field(..., min_length=6, description="New password for the user")
+
+
+class AdminPasswordResetResponse(BaseModel):
+    """Response after password reset."""
+    success: bool = True
+    message: str
 
 

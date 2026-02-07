@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS users (
     email VARCHAR UNIQUE NOT NULL,
     password_hash VARCHAR NOT NULL,
     last_active_language VARCHAR,
+    status VARCHAR DEFAULT 'active',
     total_exams_taken INTEGER DEFAULT 0,
     created_at TIMESTAMP DEFAULT NOW()
 );
