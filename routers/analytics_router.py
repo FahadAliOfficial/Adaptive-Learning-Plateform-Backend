@@ -10,6 +10,7 @@ from typing import Optional
 
 from database import get_db
 from services.multi_level_analytics_service import MultiLevelAnalyticsService
+from services.auth import get_current_active_user, get_current_admin_user
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
 
@@ -18,6 +19,7 @@ router = APIRouter(prefix="/analytics", tags=["Analytics"])
 def get_student_error_profile(
     user_id: str,
     language_id: str = Query(..., description="Language to analyze (e.g., 'python_3')"),
+    current_user: dict = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -34,6 +36,10 @@ def get_student_error_profile(
     - Most common errors
     - Personalized improvement areas
     """
+    # Verify user can only access their own profile
+    if current_user["id"] != user_id:
+        raise HTTPException(status_code=403, detail="Cannot access other user's analytics")
+    
     analytics = MultiLevelAnalyticsService(db)
     profile = analytics.get_student_error_profile(user_id, language_id)
     
@@ -52,6 +58,7 @@ def get_student_error_profile(
 def get_subtopic_error_distribution(
     sub_topic: str,
     language_id: str = Query(..., description="Language (e.g., 'python_3')"),
+    current_user: dict = Depends(get_current_admin_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -67,6 +74,8 @@ def get_subtopic_error_distribution(
     - Error distribution percentages
     - Most common error type
     - Overall accuracy rate
+    
+    **Requires:** Admin/teacher authentication
     """
     analytics = MultiLevelAnalyticsService(db)
     distribution = analytics.get_sub_topic_error_distribution(language_id, sub_topic)
@@ -84,6 +93,7 @@ def get_subtopic_error_distribution(
 def get_cross_topic_error_analysis(
     user_id: str,
     language_id: str = Query(..., description="Language (e.g., 'python_3')"),
+    current_user: dict = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -99,6 +109,10 @@ def get_cross_topic_error_analysis(
     - Sub-topic performance summary
     - Targeted recommendations
     """
+    # Verify user can only access their own analysis
+    if current_user["id"] != user_id:
+        raise HTTPException(status_code=403, detail="Cannot access other user's analytics")
+    
     analytics = MultiLevelAnalyticsService(db)
     analysis = analytics.get_cross_topic_error_analysis(user_id, language_id)
     
@@ -112,6 +126,7 @@ def get_cross_topic_error_analysis(
 def get_personalized_recommendations(
     user_id: str,
     language_id: str = Query(..., description="Language (e.g., 'python_3')"),
+    current_user: dict = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -127,6 +142,10 @@ def get_personalized_recommendations(
     - Targeted practice suggestions
     - Priority topics
     """
+    # Verify user can only access their own recommendations
+    if current_user["id"] != user_id:
+        raise HTTPException(status_code=403, detail="Cannot access other user's recommendations")
+    
     analytics = MultiLevelAnalyticsService(db)
     profile = analytics.get_student_error_profile(user_id, language_id)
     
@@ -154,6 +173,7 @@ def get_personalized_recommendations(
 @router.get("/class-insights")
 def get_class_wide_insights(
     language_id: str = Query(..., description="Language (e.g., 'python_3')"),
+    current_user: dict = Depends(get_current_admin_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -167,6 +187,8 @@ def get_class_wide_insights(
     **Returns:**
     - Most difficult sub-topics
     - Common error patterns across all students
+    
+    **Requires:** Admin/teacher authentication
     """
     # Get all sub-topics for this language from question bank
     from sqlalchemy import text

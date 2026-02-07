@@ -45,6 +45,7 @@ from routers import question_bank_router
 from routers import analytics_router
 from routers import auth_router
 from routers import rl_router
+from routers import admin_router
 
 app = FastAPI(
     title="FYP Backend API - Adaptive Learning",
@@ -104,6 +105,9 @@ app.include_router(analytics_router.router)
 
 # Register RL routes
 app.include_router(rl_router.router)
+
+# Register admin routes
+app.include_router(admin_router.router)
 
 
 @app.get("/")

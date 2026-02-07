@@ -222,14 +222,13 @@ async def get_current_admin_user(
     """
     Dependency to verify current user is an admin.
     
-    Note: Requires adding is_admin or role column to users table.
-    For now, uses email-based check (update this for production).
+    Uses is_admin column from users table for authentication.
     """
-    # TODO: Add is_admin or role column to users table
-    # For now, check against admin email list in env
-    admin_emails = os.getenv("ADMIN_EMAILS", "").split(",")
+    # Check is_admin status from database
+    query = text("SELECT is_admin FROM users WHERE id = :user_id")
+    result = db.execute(query, {"user_id": current_user["id"]}).fetchone()
     
-    if current_user.get("email") not in admin_emails:
+    if not result or not result[0]:  # is_admin is False or NULL
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions. Admin access required."

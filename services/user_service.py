@@ -6,7 +6,7 @@ Primes new users' knowledge state based on their self-reported experience level.
 import uuid
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from datetime import datetime
 
 from .schemas import UserRegistrationPayload, UserRegistrationResponse, LoginRequest, LoginResponse, UserProfile
@@ -183,7 +183,7 @@ class UserService:
         """
         # Fetch user by email
         query = text("""
-            SELECT id, email, password_hash, last_active_language
+            SELECT id, email, password_hash, last_active_language, is_admin
             FROM users
             WHERE email = :email
         """)
@@ -193,7 +193,7 @@ class UserService:
         if not user:
             raise ValueError("Invalid email or password")
         
-        user_id, email, password_hash, last_active_language = user
+        user_id, email, password_hash, last_active_language, is_admin = user
         
         # Verify password
         if not verify_password(payload.password, password_hash):
@@ -210,7 +210,8 @@ class UserService:
             token_type="bearer",
             user_id=user_id,
             email=email,
-            last_active_language=last_active_language
+            last_active_language=last_active_language,
+            is_admin=is_admin
         )
     
     def get_user_profile(self, user_id: str) -> UserProfile:
@@ -287,4 +288,289 @@ class UserService:
         self.db.commit()
         
         return True
+    
+    def get_all_users_admin(self, search_query: Optional[str] = None, status_filter: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Get all users for admin management with filtering and search.
+        
+        Args:
+            search_query: Optional email/name search term
+            status_filter: Optional status filter (active, inactive, suspended, or all)
+        
+        Returns:
+            Dictionary containing user list and statistics
+        """
+        # Base query for users with their calculated status and statistics
+        base_query = """
+            SELECT 
+                u.id,
+                u.email,
+                u.created_at,
+                u.last_active_language,
+                u.total_exams_taken,
+                CASE 
+                    WHEN es_recent.last_session_date >= NOW() - INTERVAL '30 days' THEN 'active'
+                    WHEN es_recent.last_session_date IS NOT NULL THEN 'inactive'
+                    ELSE 'inactive'
+                END as status,
+                COALESCE(es_recent.last_session_date, u.created_at) as last_active,
+                COALESCE(completed_sessions.session_count, 0) as sessions_completed,
+                COALESCE(avg_mastery.avg_mastery_score, 0.0) as avg_mastery_score
+            FROM users u
+            LEFT JOIN (
+                SELECT 
+                    user_id,
+                    MAX(completed_at) as last_session_date
+                FROM exam_sessions 
+                WHERE session_status = 'completed' 
+                GROUP BY user_id
+            ) es_recent ON u.id = es_recent.user_id
+            LEFT JOIN (
+                SELECT 
+                    user_id,
+                    COUNT(*) as session_count
+                FROM exam_sessions
+                WHERE session_status = 'completed'
+                GROUP BY user_id
+            ) completed_sessions ON u.id = completed_sessions.user_id
+            LEFT JOIN (
+                SELECT 
+                    user_id,
+                    AVG(mastery_score) as avg_mastery_score
+                FROM student_state
+                GROUP BY user_id
+            ) avg_mastery ON u.id = avg_mastery.user_id
+        """
+        
+        # Add search and filter conditions
+        where_conditions = []
+        params = {}
+        
+        if search_query:
+            where_conditions.append("(LOWER(u.email) LIKE LOWER(:search) OR LOWER(u.email) LIKE LOWER(:search))")
+            params["search"] = f"%{search_query}%"
+        
+        if status_filter and status_filter != "all":
+            # Add status filter to HAVING clause since status is calculated
+            where_conditions.append("""
+                CASE 
+                    WHEN es_recent.last_session_date >= NOW() - INTERVAL '30 days' THEN 'active'
+                    WHEN es_recent.last_session_date IS NOT NULL THEN 'inactive'
+                    ELSE 'inactive'
+                END = :status_filter
+            """)
+            params["status_filter"] = status_filter
+        
+        if where_conditions:
+            final_query = f"{base_query} WHERE {' AND '.join(where_conditions)}"
+        else:
+            final_query = base_query
+        
+        final_query += " ORDER BY u.created_at DESC"
+        
+        users_result = self.db.execute(text(final_query), params).fetchall()
+        
+        # Process user data
+        users = []
+        for row in users_result:
+            # Extract name from email (everything before @)
+            name = row[1].split('@')[0].replace('.', ' ').title()
+            
+            users.append({
+                "id": row[0],
+                "email": row[1],
+                "name": name,
+                "status": row[5],
+                "language": row[3] or "Not Set",
+                "joinedAt": row[2].isoformat() if row[2] else None,
+                "lastActive": row[6].isoformat() if row[6] else None,
+                "sessionsCompleted": int(row[7]),
+                "avgMastery": round(float(row[8]) * 100, 1) if row[8] else 0.0
+            })
+        
+        # Get count statistics separately to avoid complex grouping
+        stats_query = """
+            WITH user_stats as (
+                SELECT 
+                    u.id,
+                    CASE 
+                        WHEN es_recent.last_session_date >= NOW() - INTERVAL '30 days' THEN 'active'
+                        WHEN es_recent.last_session_date IS NOT NULL THEN 'inactive'
+                        ELSE 'inactive'
+                    END as status
+                FROM users u
+                LEFT JOIN (
+                    SELECT 
+                        user_id,
+                        MAX(completed_at) as last_session_date
+                    FROM exam_sessions 
+                    WHERE session_status = 'completed' 
+                    GROUP BY user_id
+                ) es_recent ON u.id = es_recent.user_id
+            )
+            SELECT 
+                COUNT(*) as total_count,
+                COUNT(CASE WHEN status = 'active' THEN 1 END) as active_count,
+                COUNT(CASE WHEN status = 'inactive' THEN 1 END) as inactive_count,
+                COUNT(CASE WHEN status = 'suspended' THEN 1 END) as suspended_count
+            FROM user_stats
+        """
+        
+        stats_result = self.db.execute(text(stats_query)).fetchone()
+        
+        return {
+            "users": users,
+            "total_count": int(stats_result[0]),
+            "active_count": int(stats_result[1]),
+            "inactive_count": int(stats_result[2]),
+            "suspended_count": int(stats_result[3])
+        }
+    
+    def update_user_status_admin(self, user_id: str, new_status: str) -> Dict[str, Any]:
+        """
+        Update user status for admin management.
+        
+        Note: Currently this is a placeholder since the users table doesn't have a status column.
+        In production, you would add a status column or use a separate user_status table.
+        
+        Args:
+            user_id: User UUID
+            new_status: New status (active, inactive, suspended)
+        
+        Returns:
+            Updated user data
+        
+        Raises:
+            ValueError: If user not found
+        """
+        # For now, since we don't have a status column, we simulate the update
+        # In production, you would add: ALTER TABLE users ADD COLUMN status VARCHAR DEFAULT 'active';
+        # Then execute: UPDATE users SET status = :status WHERE id = :user_id
+        
+        # Verify user exists
+        check_user = text("SELECT id, email, created_at FROM users WHERE id = :user_id")
+        user = self.db.execute(check_user, {"user_id": user_id}).fetchone()
+        
+        if not user:
+            raise ValueError("User not found")
+        
+        # In production, uncomment these lines after adding status column:
+        # update_status = text("UPDATE users SET status = :status WHERE id = :user_id")
+        # self.db.execute(update_status, {"status": new_status, "user_id": user_id})
+        # self.db.commit()
+        
+        # Return updated user data (simulated for now)
+        name = user[1].split('@')[0].replace('.', ' ').title()
+        
+        return {
+            "id": user[0],
+            "email": user[1],
+            "name": name,
+            "status": new_status,  # This would come from the database in production
+            "language": "Not Set",
+            "joinedAt": user[2].isoformat() if user[2] else None,
+            "lastActive": None,
+            "sessionsCompleted": 0,
+            "avgMastery": 0.0
+        }
+    
+    def get_user_analytics_admin(self) -> Dict[str, Any]:
+        """
+        Get comprehensive user analytics for admin dashboard.
+        
+        Returns:
+            Dictionary containing user statistics and analytics
+        """
+        # Main analytics query
+        analytics_query = """
+            WITH user_activity AS (
+                SELECT 
+                    u.id,
+                    u.email,
+                    u.created_at,
+                    u.last_active_language,
+                    CASE 
+                        WHEN es_recent.last_session_date >= NOW() - INTERVAL '30 days' THEN 'active'
+                        WHEN es_recent.last_session_date IS NOT NULL THEN 'inactive'
+                        ELSE 'inactive'
+                    END as status,
+                    COALESCE(completed_sessions.session_count, 0) as sessions_completed,
+                    COALESCE(avg_mastery.avg_mastery_score, 0.0) as avg_mastery_score
+                FROM users u
+                LEFT JOIN (
+                    SELECT 
+                        user_id,
+                        MAX(completed_at) as last_session_date
+                    FROM exam_sessions 
+                    WHERE session_status = 'completed' 
+                    GROUP BY user_id
+                ) es_recent ON u.id = es_recent.user_id
+                LEFT JOIN (
+                    SELECT 
+                        user_id,
+                        COUNT(*) as session_count
+                    FROM exam_sessions
+                    WHERE session_status = 'completed'
+                    GROUP BY user_id
+                ) completed_sessions ON u.id = completed_sessions.user_id
+                LEFT JOIN (
+                    SELECT 
+                        user_id,
+                        AVG(mastery_score) as avg_mastery_score
+                    FROM student_state
+                    GROUP BY user_id
+                ) avg_mastery ON u.id = avg_mastery.user_id
+            )
+            SELECT 
+                COUNT(*) as total_users,
+                COUNT(CASE WHEN status = 'active' THEN 1 END) as active_users,
+                COUNT(CASE WHEN status = 'inactive' THEN 1 END) as inactive_users,
+                COUNT(CASE WHEN status = 'suspended' THEN 1 END) as suspended_users,
+                COUNT(CASE WHEN created_at >= NOW() - INTERVAL '7 days' THEN 1 END) as new_users_last_7_days,
+                COUNT(CASE WHEN created_at >= NOW() - INTERVAL '30 days' THEN 1 END) as new_users_last_30_days,
+                AVG(sessions_completed) as avg_sessions_per_user,
+                AVG(avg_mastery_score) as avg_mastery_across_platform
+            FROM user_activity
+        """
+        
+        analytics_result = self.db.execute(text(analytics_query)).fetchone()
+        
+        # Language distribution query
+        language_query = """
+            SELECT 
+                COALESCE(last_active_language, 'Not Set') as language,
+                COUNT(*) as user_count
+            FROM users
+            GROUP BY last_active_language
+            ORDER BY user_count DESC
+        """
+        
+        language_result = self.db.execute(text(language_query)).fetchall()
+        
+        # Process language distribution
+        languages_distribution = {}
+        most_popular_language = "Not Set"
+        max_count = 0
+        
+        for row in language_result:
+            language = row[0] if row[0] else "Not Set"
+            count = int(row[1])
+            languages_distribution[language] = count
+            
+            if count > max_count:
+                max_count = count
+                most_popular_language = language
+        
+        return {
+            "total_users": int(analytics_result[0]) if analytics_result[0] else 0,
+            "active_users": int(analytics_result[1]) if analytics_result[1] else 0,
+            "inactive_users": int(analytics_result[2]) if analytics_result[2] else 0,
+            "suspended_users": int(analytics_result[3]) if analytics_result[3] else 0,
+            "new_users_last_7_days": int(analytics_result[4]) if analytics_result[4] else 0,
+            "new_users_last_30_days": int(analytics_result[5]) if analytics_result[5] else 0,
+            "avg_sessions_per_user": round(float(analytics_result[6]), 1) if analytics_result[6] else 0.0,
+            "avg_mastery_across_platform": round(float(analytics_result[7]) * 100, 1) if analytics_result[7] else 0.0,
+            "most_popular_language": most_popular_language,
+            "languages_distribution": languages_distribution
+        }
 

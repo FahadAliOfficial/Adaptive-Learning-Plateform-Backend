@@ -219,6 +219,7 @@ class LoginResponse(BaseModel):
     user_id: str
     email: str
     last_active_language: Optional[str] = None
+    is_admin: bool = Field(default=False, description="Whether user has admin privileges")
 
 
 class TokenRefreshRequest(BaseModel):
@@ -300,5 +301,56 @@ class HealthStatusResponse(BaseModel):
     models_loaded: dict = Field(..., description="Status of each model (ppo, dqn, a2c)")
     environment_ready: bool
     available_strategies: List[str]
+
+
+# ==================== Admin Schemas ====================
+
+class AdminUser(BaseModel):
+    """User data structure for admin management."""
+    id: str
+    email: str
+    name: str = Field(..., description="User display name (derived from email if not set)")
+    status: str = Field(..., description="User status: active, inactive, suspended")
+    language: Optional[str] = Field(None, description="Last active language")
+    joinedAt: str = Field(..., description="ISO format timestamp when user joined")
+    lastActive: Optional[str] = Field(None, description="ISO format timestamp of last activity")
+    sessionsCompleted: int = Field(default=0, description="Total number of completed practice sessions")
+    avgMastery: float = Field(default=0.0, description="Average mastery score across all topics")
+
+
+class AdminUserListResponse(BaseModel):
+    """Response for GET /api/admin/users endpoint."""
+    success: bool = True
+    users: List[AdminUser]
+    total_count: int
+    active_count: int
+    inactive_count: int
+    suspended_count: int
+
+
+class AdminUserStatusUpdateRequest(BaseModel):
+    """Request to update user status."""
+    status: Literal["active", "inactive", "suspended"] = Field(..., description="New user status")
+
+
+class AdminUserStatusUpdateResponse(BaseModel):
+    """Response after updating user status."""
+    success: bool = True
+    message: str
+    updated_user: AdminUser
+
+
+class AdminUserAnalytics(BaseModel):
+    """User analytics data for admin dashboard."""
+    total_users: int
+    active_users: int
+    inactive_users: int
+    suspended_users: int
+    new_users_last_7_days: int
+    new_users_last_30_days: int
+    avg_sessions_per_user: float
+    avg_mastery_across_platform: float
+    most_popular_language: str
+    languages_distribution: dict = Field(..., description="Language usage distribution")
 
 
