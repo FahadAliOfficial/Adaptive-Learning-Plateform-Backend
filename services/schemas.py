@@ -380,3 +380,96 @@ class AdminPasswordResetResponse(BaseModel):
     message: str
 
 
+# ==================== Admin Question Bank Schemas ====================
+
+class AdminQuestion(BaseModel):
+    """Question data structure for admin management."""
+    id: str
+    language_id: str
+    mapping_id: str
+    sub_topic: Optional[str]
+    difficulty: float
+    question_data: dict
+    content_hash: str
+    is_verified: bool
+    quality_score: float
+    times_used: int
+    times_correct: int
+    calibrated_difficulty: Optional[float]
+    created_at: str
+    created_by: str
+    review_notes: Optional[str] = None
+    
+    class Config:
+        from_attributes = True
+
+
+class AdminQuestionListResponse(BaseModel):
+    """Response for GET /api/admin/questions endpoint."""
+    success: bool = True
+    questions: List[AdminQuestion]
+    total_count: int
+    verified_count: int
+    unverified_count: int
+    page: int
+    limit: int
+
+
+class AdminQuestionUpdateRequest(BaseModel):
+    """Request to update question content."""
+    question_data: Optional[dict] = Field(None, description="Updated question JSONB content")
+    difficulty: Optional[float] = Field(None, ge=0.0, le=1.0, description="Updated difficulty")
+    quality_score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Updated quality score")
+    sub_topic: Optional[str] = Field(None, description="Updated sub-topic")
+
+
+class AdminQuestionUpdateResponse(BaseModel):
+    """Response after updating question."""
+    success: bool = True
+    message: str
+    updated_question: AdminQuestion
+
+
+class AdminQuestionDeleteResponse(BaseModel):
+    """Response after deleting question."""
+    success: bool = True
+    message: str
+    deleted_id: str
+
+
+class AdminBulkActionRequest(BaseModel):
+    """Request for bulk operations on questions."""
+    question_ids: List[str] = Field(..., description="List of question UUIDs")
+    action: Literal["approve", "delete", "update_difficulty"] = Field(..., description="Bulk action to perform")
+    params: Optional[dict] = Field(None, description="Optional parameters for the action")
+
+
+class AdminBulkActionResponse(BaseModel):
+    """Response after bulk operation."""
+    success: bool = True
+    message: str
+    affected_count: int
+    failed_count: int
+    failed_ids: List[str] = []
+
+
+class AdminQuestionAnalytics(BaseModel):
+    """Analytics for a specific question."""
+    question_id: str
+    times_used: int
+    times_correct: int
+    accuracy_rate: float
+    avg_time_spent: Optional[float]
+    quality_score: float
+    calibrated_difficulty: Optional[float]
+    assigned_difficulty: float
+
+
+class AdminLowQualityQuestionsResponse(BaseModel):
+    """Response for low quality questions endpoint."""
+    success: bool = True
+    questions: List[AdminQuestion]
+    total_count: int
+    criteria: dict = Field(..., description="Criteria used to identify low quality questions")
+
+

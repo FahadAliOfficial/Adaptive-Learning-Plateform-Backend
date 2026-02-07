@@ -131,6 +131,28 @@ async def health_check():
     }
 
 
+@app.get("/curriculum/all")
+async def get_curriculum():
+    """
+    Get complete curriculum data for all languages.
+    Used by admin interfaces to populate topic/subtopic dropdowns.
+    """
+    import json
+    from pathlib import Path
+    
+    curriculum_path = Path(__file__).parent / "core" / "final_curriculum.json"
+    
+    try:
+        with open(curriculum_path, 'r', encoding='utf-8') as f:
+            curriculum_data = json.load(f)
+        return curriculum_data
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to load curriculum: {str(e)}"
+        )
+
+
 @app.on_event("startup")
 async def startup():
     """

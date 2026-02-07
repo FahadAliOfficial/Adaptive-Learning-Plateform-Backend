@@ -299,13 +299,23 @@ class MultiLanguageValidator:
         
         for opt in options:
             text = opt.get('text', '').lower().strip()
+            original_text = opt.get('text', '').strip()
             
             for pattern in forbidden_patterns:
                 if re.search(pattern, text):
                     return False, f"Forbidden option pattern: '{opt['text']}'"
             
-            # Check for too-generic answers (less than 5 characters)
-            if len(text) < 5 and not text.isdigit():
-                return False, f"Option too vague: '{opt['text']}'"
+            # Allow short answers if they are:
+            # 1. Pure numbers: "2", "42"
+            # 2. Contain digits: "2 4", "2.5", "A2"
+            # 3. Common valid short answers: "Yes", "No", "True", "False"
+            # 4. Single uppercase letter: "A", "B", "C" (option references)
+            if len(text) < 5:
+                has_digit = any(c.isdigit() for c in text)
+                is_common_short = text in ['yes', 'no', 'true', 'false']
+                is_single_letter = len(original_text) == 1 and original_text.isupper()
+                
+                if not (has_digit or is_common_short or is_single_letter):
+                    return False, f"Option too vague: '{opt['text']}'"
         
         return True, ""

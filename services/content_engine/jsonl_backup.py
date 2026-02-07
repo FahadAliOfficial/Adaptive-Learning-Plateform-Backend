@@ -339,6 +339,106 @@ class JSONLBackup:
         
         return stats
 
+    def update_question(self, question_id: str, updated_data: Dict) -> bool:
+        """
+        Update a question in the JSONL file by rewriting the entire file.
+        
+        Args:
+            question_id: The question ID to update
+            updated_data: Complete updated question dictionary
+        
+        Returns:
+            True if updated, False if question not found
+        """
+        if not os.path.exists(self.file_path):
+            return False
+        
+        # Read all questions
+        questions = []
+        found = False
+        
+        with open(self.file_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                if line.strip():
+                    q = json.loads(line)
+                    if q.get('id') == question_id:
+                        # Update this question
+                        questions.append(updated_data)
+                        found = True
+                    else:
+                        questions.append(q)
+        
+        if not found:
+            return False
+        
+        # Rewrite file atomically
+        temp_path = f"{self.file_path}.tmp"
+        with open(temp_path, 'w', encoding='utf-8') as f:
+            for q in questions:
+                f.write(json.dumps(q, ensure_ascii=False) + '\n')
+        
+        # Atomic rename
+        shutil.move(temp_path, self.file_path)
+        
+        # Rebuild index
+        if os.path.exists(self.index_path):
+            os.remove(self.index_path)
+        
+        for i, q in enumerate(questions):
+            if 'content_hash' in q:
+                self._update_index(q['content_hash'], i)
+        
+        return True
+
+    def delete_question(self, question_id: str) -> bool:
+        """
+        Delete a question from the JSONL file by rewriting without it.
+        
+        Args:
+            question_id: The question ID to delete
+        
+        Returns:
+            True if deleted, False if question not found
+        """
+        if not os.path.exists(self.file_path):
+            return False
+        
+        # Read all questions except the one to delete
+        questions = []
+        found = False
+        
+        with open(self.file_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                if line.strip():
+                    q = json.loads(line)
+                    if q.get('id') == question_id:
+                        found = True
+                        # Skip this question (delete it)
+                    else:
+                        questions.append(q)
+        
+        if not found:
+            return False
+        
+        # Rewrite file atomically
+        temp_path = f"{self.file_path}.tmp"
+        with open(temp_path, 'w', encoding='utf-8') as f:
+            for q in questions:
+                f.write(json.dumps(q, ensure_ascii=False) + '\n')
+        
+        # Atomic rename
+        shutil.move(temp_path, self.file_path)
+        
+        # Rebuild index
+        if os.path.exists(self.index_path):
+            os.remove(self.index_path)
+        
+        for i, q in enumerate(questions):
+            if 'content_hash' in q:
+                self._update_index(q['content_hash'], i)
+        
+        return True
+
 
 # Convenience function for scripts
 def backup_question(question_data: Dict, backup_file: str = "data/question_warehouse.jsonl"):

@@ -473,6 +473,28 @@ async def admin_review_question(
         question.review_notes = payload.reviewer_notes
         db.commit()
         
+        # Update JSONL warehouse
+        try:
+            from services.content_engine.jsonl_backup import JSONLBackup
+            jsonl = JSONLBackup()
+            updated_data = {
+                'id': question.id,
+                'language_id': question.language_id,
+                'mapping_id': question.mapping_id,
+                'sub_topic': question.sub_topic,
+                'difficulty': question.difficulty,
+                'question_data': question.question_data,
+                'content_hash': question.content_hash,
+                'is_verified': True,
+                'quality_score': question.quality_score,
+                'created_at': question.created_at.isoformat() if question.created_at else None,
+                'created_by': question.created_by
+            }
+            jsonl.update_question(payload.question_id, updated_data)
+            print(f"✅ Approved question {payload.question_id[:8]} in JSONL warehouse")
+        except Exception as e:
+            print(f"⚠️ Failed to update JSONL warehouse: {e}")
+        
         return AdminReviewResponse(
             question_id=payload.question_id,
             action="approve",
@@ -482,6 +504,15 @@ async def admin_review_question(
     elif payload.action == "reject":
         db.delete(question)
         db.commit()
+        
+        # Delete from JSONL warehouse
+        try:
+            from services.content_engine.jsonl_backup import JSONLBackup
+            jsonl = JSONLBackup()
+            jsonl.delete_question(payload.question_id)
+            print(f"✅ Rejected & deleted question {payload.question_id[:8]} from JSONL warehouse")
+        except Exception as e:
+            print(f"⚠️ Failed to delete from JSONL warehouse: {e}")
         
         return AdminReviewResponse(
             question_id=payload.question_id,
