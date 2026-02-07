@@ -205,6 +205,10 @@ def _background_generate(
                         print(f"[Task {task_id[:8]}] Skipped duplicate question {i+1}/{count}")
                         continue
                     
+                    # Auto-approve high-quality questions (>= 70%)
+                    quality_score = question_data.get('quality_score', 0.5)
+                    auto_approved = quality_score >= 0.70
+                    
                     question_id = str(uuid.uuid4())
                     question = QuestionBank(
                         id=question_id,
@@ -214,14 +218,20 @@ def _background_generate(
                         difficulty=difficulty,
                         question_data=question_data,
                         content_hash=content_hash,
-                        is_verified=False,  # Requires admin review
-                        quality_score=question_data.get('quality_score', 0.5)
+                        is_verified=auto_approved,
+                        quality_score=quality_score
                     )
                     
                     db.add(question)
                     db.commit()
                     
                     generated.append(question_id)
+                    
+                    # Log auto-approval
+                    if auto_approved:
+                        print(f"[Task {task_id[:8]}] ✅ Auto-approved question {i+1}/{count}: {question_id[:8]} (quality: {int(quality_score*100)}%)")
+                    else:
+                        print(f"[Task {task_id[:8]}] Generated question {i+1}/{count}: {question_id[:8]} (quality: {int(quality_score*100)}% - needs review)")
                     
                     # Prepare for JSONL backup
                     backup_data = {
@@ -233,12 +243,11 @@ def _background_generate(
                         'content_hash': content_hash,
                         'question_data': question_data,
                         'created_at': question.created_at.isoformat() if question.created_at else None,
-                        'is_verified': False,
-                        'quality_score': question_data.get('quality_score', 0.5)
+                        'is_verified': auto_approved,
+                        'quality_score': quality_score
                     }
                     backup_questions.append(backup_data)
                     
-                    print(f"[Task {task_id[:8]}] Generated question {i+1}/{count}: {question_id[:8]}")
             
             except Exception as e:
                 print(f"[Task {task_id[:8]}] Error generating question {i+1}: {e}")
@@ -274,8 +283,10 @@ async def generate_questions(
     Generate MCQ questions using OpenAI GPT-4o-mini (async background task).
     
     Returns immediately with task_id.
-    Questions are generated in background and stored as 'unverified'.
-    Admin must review and approve before they're used in exams.
+    Questions are auto-approved if quality_score >= 70%, otherwise require admin review.
+    
+    Auto-approval threshold: quality_score >= 0.70 → is_verified = True
+    Below threshold: is_verified = False (needs manual review)
     
     Rate Limiting: 50 requests/minute per IP
     """
