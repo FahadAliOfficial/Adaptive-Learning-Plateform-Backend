@@ -6,6 +6,7 @@ import openai
 from typing import List, Dict
 import os
 import logging
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -184,3 +185,104 @@ Keep each bullet under 15 words. Be encouraging but honest."""
             bullets.append("Keep up the consistent practice")
         
         return bullets[:5]
+
+    def generate_resource_recommendations(
+        self,
+        topic_name: str,
+        error_summary: Dict[str, int],
+        topic_breakdown: Dict[str, float]
+    ) -> List[Dict[str, str]]:
+        """
+        Generate 3-5 resource recommendations as structured JSON.
+        Returns [{"title": "...", "description": "..."}, ...]
+        """
+        prompt = self._build_resource_prompt(topic_name, error_summary, topic_breakdown)
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "Return ONLY valid JSON array of 3-5 items. Each item has title and description fields."
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                temperature=0.4,
+                max_tokens=300,
+                timeout=10
+            )
+
+            content = response.choices[0].message.content
+            parsed = self._parse_json_list(content)
+            return parsed[:5]
+
+        except Exception as e:
+            logger.error(f"OpenAI resource recommendations failed: {e}")
+            return self._fallback_resources(topic_name)
+
+    def _build_resource_prompt(
+        self,
+        topic_name: str,
+        error_summary: Dict[str, int],
+        topic_breakdown: Dict[str, float]
+    ) -> str:
+        """Build prompt for structured resource recommendations."""
+        if error_summary:
+            error_text = ", ".join([f"{k} ({v})" for k, v in error_summary.items()])
+        else:
+            error_text = "None"
+
+        weak_topics = [t for t, acc in topic_breakdown.items() if acc < 0.7]
+        weak_text = ", ".join(weak_topics) if weak_topics else "No weak topics detected"
+
+        return (
+            "Generate 3-5 short study resources for this exam. "
+            "Return ONLY JSON array. Each item: {\"title\": string, \"description\": string}.\n\n"
+            f"Topic: {topic_name}\n"
+            f"Weak topics: {weak_text}\n"
+            f"Error patterns: {error_text}\n"
+            "Keep titles concise and descriptions under 15 words."
+        )
+
+    def _parse_json_list(self, text: str) -> List[Dict[str, str]]:
+        """Parse a JSON array from a model response."""
+        cleaned = text.strip()
+
+        # Strip code fences if present
+        if cleaned.startswith("```"):
+            cleaned = cleaned.strip("`")
+            lines = cleaned.split("\n")
+            cleaned = "\n".join(lines[1:])
+
+        # Find first JSON array
+        start = cleaned.find("[")
+        end = cleaned.rfind("]")
+        if start == -1 or end == -1:
+            raise ValueError("No JSON array found")
+
+        payload = cleaned[start:end + 1]
+        data = json.loads(payload)
+
+        if not isinstance(data, list):
+            raise ValueError("Expected JSON array")
+
+        results = []
+        for item in data:
+            title = str(item.get("title", "")).strip()
+            description = str(item.get("description", "")).strip()
+            if title and description:
+                results.append({"title": title, "description": description})
+
+        return results
+
+    def _fallback_resources(self, topic_name: str) -> List[Dict[str, str]]:
+        """Fallback recommendations if LLM fails."""
+        return [
+            {"title": f"{topic_name} Refresher", "description": "Review key concepts with short examples."},
+            {"title": "Targeted Practice", "description": "Solve 10-15 focused problems on weak areas."},
+            {"title": "Common Mistakes", "description": "Study frequent pitfalls and how to avoid them."}
+        ]

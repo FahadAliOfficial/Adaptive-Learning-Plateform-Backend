@@ -3,7 +3,7 @@ Intelligent question selection with "not seen" tracking.
 Implements multiple selection strategies with graceful fallbacks.
 """
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, not_, func
+from sqlalchemy import and_, not_, func, text
 from models.question_bank import QuestionBank, UserQuestionHistory
 from typing import List, Optional, Dict
 import random
@@ -32,7 +32,9 @@ class QuestionSelector:
         mapping_id: str,
         target_difficulty: float,
         count: int = 10,
-        difficulty_tolerance: float = 0.1
+        difficulty_tolerance: float = 0.1,
+        mode: str = "exam",
+        seen_ratio: float = 0.4
     ) -> List[QuestionBank]:
         """
         Select best questions for user.
@@ -48,50 +50,252 @@ class QuestionSelector:
         Returns:
             List of QuestionBank objects (may be less than count if warehouse empty)
         """
-        # Strategy 1: Try unseen verified questions first
-        questions = self._select_strategy_1(
-            user_id, language_id, mapping_id, target_difficulty, 
-            difficulty_tolerance, count
+        if mode == "practice":
+            return self._select_practice_mix(
+                user_id,
+                language_id,
+                mapping_id,
+                target_difficulty,
+                difficulty_tolerance,
+                count,
+                seen_ratio
+            )
+        
+        if mode == "review":
+            return self._select_review_mix(
+                user_id,
+                language_id,
+                mapping_id,
+                target_difficulty,
+                difficulty_tolerance,
+                count,
+                seen_ratio
+            )
+        
+        return self._select_exam_unseen(
+            user_id,
+            language_id,
+            mapping_id,
+            target_difficulty,
+            difficulty_tolerance,
+            count
+        )
+
+    def _get_seen_question_ids(
+        self,
+        user_id: str,
+        language_id: str,
+        mapping_id: str,
+        exam_only: bool
+    ) -> List[str]:
+        """
+        Fetch question IDs seen by user for this topic.
+        If exam_only is True, only include questions from prior exam sessions.
+        """
+        if exam_only:
+            query = text("""
+                SELECT h.question_id
+                FROM user_question_history h
+                JOIN question_bank q ON q.id = h.question_id
+                JOIN exam_sessions es ON es.id = h.session_id
+                WHERE h.user_id = :u
+                  AND q.language_id = :l
+                  AND q.mapping_id = :m
+                  AND es.session_type = 'exam'
+            """)
+        else:
+            query = text("""
+                SELECT h.question_id
+                FROM user_question_history h
+                JOIN question_bank q ON q.id = h.question_id
+                WHERE h.user_id = :u
+                  AND q.language_id = :l
+                  AND q.mapping_id = :m
+            """)
+        
+        rows = self.db.execute(query, {
+            "u": user_id,
+            "l": language_id,
+            "m": mapping_id
+        }).fetchall()
+        
+        return [row[0] for row in rows]
+
+    def _select_questions_by_ids(
+        self,
+        question_ids: List[str],
+        language_id: str,
+        mapping_id: str,
+        target_diff: float,
+        tolerance: float,
+        count: int
+    ) -> List[QuestionBank]:
+        if not question_ids or count <= 0:
+            return []
+        
+        questions = self.db.query(QuestionBank).filter(
+            and_(
+                QuestionBank.id.in_(question_ids),
+                QuestionBank.language_id == language_id,
+                QuestionBank.mapping_id == mapping_id,
+                QuestionBank.difficulty.between(target_diff - tolerance, target_diff + tolerance),
+                QuestionBank.is_verified == True
+            )
+        ).order_by(
+            QuestionBank.quality_score.desc(),
+            func.random()
+        ).limit(count * 3).all()
+        
+        random.shuffle(questions)
+        return questions[:count]
+
+    def _select_unseen_questions(
+        self,
+        exclude_ids: List[str],
+        language_id: str,
+        mapping_id: str,
+        target_diff: float,
+        tolerance: float,
+        count: int
+    ) -> List[QuestionBank]:
+        if count <= 0:
+            return []
+        
+        conditions = [
+            QuestionBank.language_id == language_id,
+            QuestionBank.mapping_id == mapping_id,
+            QuestionBank.difficulty.between(target_diff - tolerance, target_diff + tolerance),
+            QuestionBank.is_verified == True
+        ]
+        
+        if exclude_ids:
+            conditions.append(~QuestionBank.id.in_(exclude_ids))
+        
+        questions = self.db.query(QuestionBank).filter(
+            and_(*conditions)
+        ).order_by(
+            QuestionBank.quality_score.desc(),
+            func.random()
+        ).limit(count * 3).all()
+        
+        random.shuffle(questions)
+        return questions[:count]
+
+    def _select_exam_unseen(
+        self,
+        user_id: str,
+        language_id: str,
+        mapping_id: str,
+        target_diff: float,
+        tolerance: float,
+        count: int
+    ) -> List[QuestionBank]:
+        seen_ids = self._get_seen_question_ids(user_id, language_id, mapping_id, exam_only=False)
+        return self._select_unseen_questions(
+            exclude_ids=seen_ids,
+            language_id=language_id,
+            mapping_id=mapping_id,
+            target_diff=target_diff,
+            tolerance=tolerance,
+            count=count
+        )
+
+    def _select_practice_mix(
+        self,
+        user_id: str,
+        language_id: str,
+        mapping_id: str,
+        target_diff: float,
+        tolerance: float,
+        count: int,
+        seen_ratio: float
+    ) -> List[QuestionBank]:
+        seen_target = max(0, int(round(count * seen_ratio)))
+        unseen_target = max(0, count - seen_target)
+        
+        seen_exam_ids = self._get_seen_question_ids(user_id, language_id, mapping_id, exam_only=True)
+        all_seen_ids = self._get_seen_question_ids(user_id, language_id, mapping_id, exam_only=False)
+        
+        seen_questions = self._select_questions_by_ids(
+            seen_exam_ids, language_id, mapping_id, target_diff, tolerance, seen_target
         )
         
-        if len(questions) >= count:
-            return questions[:count]
+        # If we don't have enough seen questions, shift the remainder to unseen
+        missing_seen = max(0, seen_target - len(seen_questions))
+        unseen_target += missing_seen
         
-        # Track IDs to avoid duplicates across strategies
-        seen_q_ids = {q.id for q in questions}
-        
-        # Strategy 2: Include unseen unverified questions
-        additional = self._select_strategy_2(
-            user_id, language_id, mapping_id, target_difficulty,
-            difficulty_tolerance, count - len(questions)
+        unseen_questions = self._select_unseen_questions(
+            exclude_ids=all_seen_ids,
+            language_id=language_id,
+            mapping_id=mapping_id,
+            target_diff=target_diff,
+            tolerance=tolerance,
+            count=unseen_target
         )
         
-        # Add only new questions (deduplicate)
-        for q in additional:
-            if q.id not in seen_q_ids:
-                questions.append(q)
-                seen_q_ids.add(q.id)
-                if len(questions) >= count:
-                    break
+        combined = seen_questions + unseen_questions
         
-        if len(questions) >= count:
-            return questions[:count]
+        # Final fallback: allow verified repeats if still short
+        if len(combined) < count:
+            fallback = self._select_strategy_3(
+                user_id,
+                language_id,
+                mapping_id,
+                target_diff,
+                tolerance,
+                count - len(combined)
+            )
+            combined.extend(fallback)
         
-        # Strategy 3: Fallback - allow repeats of old questions
-        additional = self._select_strategy_3(
-            user_id, language_id, mapping_id, target_difficulty,
-            difficulty_tolerance, count - len(questions)
+        random.shuffle(combined)
+        return combined[:count]
+
+    def _select_review_mix(
+        self,
+        user_id: str,
+        language_id: str,
+        mapping_id: str,
+        target_diff: float,
+        tolerance: float,
+        count: int,
+        seen_ratio: float
+    ) -> List[QuestionBank]:
+        seen_target = max(0, int(round(count * seen_ratio)))
+        unseen_target = max(0, count - seen_target)
+        
+        seen_ids = self._get_seen_question_ids(user_id, language_id, mapping_id, exam_only=False)
+        
+        seen_questions = self._select_questions_by_ids(
+            seen_ids, language_id, mapping_id, target_diff, tolerance, seen_target
         )
         
-        # Add only new questions (deduplicate)
-        for q in additional:
-            if q.id not in seen_q_ids:
-                questions.append(q)
-                seen_q_ids.add(q.id)
-                if len(questions) >= count:
-                    break
+        missing_seen = max(0, seen_target - len(seen_questions))
+        unseen_target += missing_seen
         
-        return questions[:count]  # Return up to count (may be less)
+        unseen_questions = self._select_unseen_questions(
+            exclude_ids=seen_ids,
+            language_id=language_id,
+            mapping_id=mapping_id,
+            target_diff=target_diff,
+            tolerance=tolerance,
+            count=unseen_target
+        )
+        
+        combined = seen_questions + unseen_questions
+        
+        if len(combined) < count:
+            fallback = self._select_strategy_3(
+                user_id,
+                language_id,
+                mapping_id,
+                target_diff,
+                tolerance,
+                count - len(combined)
+            )
+            combined.extend(fallback)
+        
+        random.shuffle(combined)
+        return combined[:count]
     
     def _select_strategy_1(self, user_id, language_id, mapping_id, 
                           target_diff, tolerance, count) -> List[QuestionBank]:

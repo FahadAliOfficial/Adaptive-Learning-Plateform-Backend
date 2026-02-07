@@ -14,6 +14,7 @@ from .schemas import ExamSubmissionPayload, QuestionResult, MasteryUpdateRespons
 from .config import get_config
 from .error_detection_service import error_detection_service
 from .review_scheduler import ReviewScheduler
+from .content_engine.selector import QuestionSelector
 from .pattern_analyzer import PatternAnalyzer
 
 
@@ -126,15 +127,19 @@ class GradingService:
             # 8. Store Session History
             session_id = self._save_session_history(payload, accuracy, avg_difficulty, fluency_ratio)
             
-            # 8.5. Mark RL recommendation as followed if this matches recent recommendation
-            self._mark_recommendation_followed(
-                payload.user_id,
-                payload.language_id,
-                payload.major_topic_id
-            )
+            # 8.5. Mark RL recommendation as followed only for exam sessions
+            if payload.session_type == "exam":
+                self._mark_recommendation_followed(
+                    payload.user_id,
+                    payload.language_id,
+                    payload.major_topic_id
+                )
             
             # 9. Save Detailed Questions Snapshot with error tracking
             self._save_exam_details(session_id, payload.results)
+
+            # 9.5. Record question history for seen tracking
+            self._record_question_history(payload.user_id, str(session_id), payload.results)
             
             # 10. Generate Recommendations (includes difficulty tier suggestion)
             recommendations = self._generate_recommendations(
@@ -331,7 +336,7 @@ class GradingService:
             
             sql = text("""
                 UPDATE student_state 
-                SET mastery_score = MIN(mastery_score + :val, 1.0)
+                SET mastery_score = LEAST(mastery_score + :val, 1.0)
                 WHERE user_id=:u AND mapping_id=:target AND language_id=:l
             """)
             
@@ -452,7 +457,7 @@ class GradingService:
                 # Update target mapping mastery
                 update_query = text("""
                     UPDATE student_state
-                    SET mastery_score = MIN(mastery_score + :boost, 1.0),
+                    SET mastery_score = LEAST(mastery_score + :boost, 1.0),
                         last_updated = CURRENT_TIMESTAMP
                     WHERE user_id = :u AND language_id = :l AND mapping_id = :m
                 """)
@@ -528,7 +533,7 @@ class GradingService:
                 
                 update = text("""
                     UPDATE student_state 
-                    SET mastery_score = MIN(mastery_score + :boost, 1.0)
+                    SET mastery_score = LEAST(mastery_score + :boost, 1.0)
                     WHERE user_id=:u AND language_id=:l AND mapping_id=:m
                 """)
                 
@@ -613,6 +618,8 @@ class GradingService:
             mapping_id
         )
         
+        action = "GRADED" if payload.session_type == "exam" else None
+
         update = text("""
             UPDATE exam_sessions 
             SET overall_score = :score,
@@ -630,7 +637,7 @@ class GradingService:
             "score": accuracy,
             "diff": difficulty,
             "time": payload.total_time_seconds,
-            "action": "GRADED",  # Placeholder for RL action
+            "action": action,
             "next_diff": recommended_next_diff
         })
         
@@ -648,6 +655,13 @@ class GradingService:
                     "difficulty": q.difficulty,
                     "is_correct": q.is_correct,
                     "time_spent": q.time_spent,
+                    "expected_time": q.expected_time,
+                    "selected_choice": q.selected_choice,
+                    "correct_choice": q.correct_choice,
+                    "question_text": q.question_text,
+                    "code_snippet": q.code_snippet,
+                    "options": q.options,
+                    "explanation": q.explanation,
                     "error_type": q.error_type
                 }
                 for q in results
@@ -663,6 +677,36 @@ class GradingService:
             "sid": str(session_id),
             "snap": json.dumps(snapshot)  # Proper JSON serialization (handles quotes, escaping, etc.)
         })
+
+    def _record_question_history(
+        self,
+        user_id: str,
+        session_id: str,
+        results: List[QuestionResult]
+    ):
+        """Persist questions shown to the user for future seen/unseen filtering."""
+        insert = text("""
+            INSERT INTO user_question_history (
+                id, user_id, question_id, session_id, was_correct, time_spent_seconds, seen_at
+            )
+            VALUES (
+                :id, :user_id, :question_id, :session_id, :was_correct, :time_spent_seconds, NOW()
+            )
+        """)
+
+        params = []
+        for q in results:
+            params.append({
+                "id": str(uuid.uuid4()),
+                "user_id": user_id,
+                "question_id": q.q_id,
+                "session_id": session_id,
+                "was_correct": q.is_correct,
+                "time_spent_seconds": q.time_spent
+            })
+
+        if params:
+            self.db.execute(insert, params)
     
     def _generate_recommendations(
         self, 

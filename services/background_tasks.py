@@ -110,6 +110,20 @@ async def generate_exam_analysis_task(
             topic_breakdown=topic_acc,
             results=questions
         )
+
+        resources = analysis_service.generate_resource_recommendations(
+            topic_name=topic_name,
+            error_summary=error_summary,
+            topic_breakdown=topic_acc
+        )
+
+        recommendations_payload = {
+            "resources": resources,
+            "error_patterns": [
+                {"error_type": k, "count": v} for k, v in error_summary.items()
+            ],
+            "topic_breakdown": topic_acc
+        }
         
         # 5. Save analysis
         db.execute(text("""
@@ -117,10 +131,12 @@ async def generate_exam_analysis_task(
             SET 
                 analysis_status = 'completed',
                 analysis_bullets = :bullets,
+                recommendations = :recommendations,
                 analysis_generated_at = :now
             WHERE session_id = :sid
         """), {
             "bullets": bullets,
+            "recommendations": json.dumps(recommendations_payload),
             "now": datetime.now(),
             "sid": session_id
         })

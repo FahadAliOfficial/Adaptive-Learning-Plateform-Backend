@@ -5,7 +5,7 @@ Provides REST API for question generation, selection, and admin review.
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status, Request
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Literal
 from datetime import datetime
 import uuid
 
@@ -14,7 +14,10 @@ from models.question_bank import QuestionBank, UserQuestionHistory
 from services.content_engine.openai_factory import OpenAIFactory
 from services.content_engine.selector import QuestionSelector
 from services.content_engine.validator import MultiLanguageValidator
+from services.review_scheduler import ReviewScheduler
+from services.config import get_config
 from services.auth import get_current_active_user, get_current_admin_user
+from sqlalchemy import text
 
 
 router = APIRouter(prefix="/question-bank", tags=["Question Bank"])
@@ -47,6 +50,8 @@ class SelectRequest(BaseModel):
     target_difficulty: float = Field(..., ge=0.0, le=1.0)
     count: int = Field(default=10, ge=1, le=50)
     difficulty_tolerance: float = Field(default=0.1, ge=0.0, le=0.5)
+    mode: Literal["practice", "exam", "review"] = Field(default="exam")
+    seen_ratio: float = Field(default=0.4, ge=0.0, le=1.0)
 
 
 class QuestionResponse(BaseModel):
@@ -56,6 +61,9 @@ class QuestionResponse(BaseModel):
     difficulty: float
     quality_score: float
     is_verified: bool
+    mapping_id: Optional[str] = None
+    language_id: Optional[str] = None
+    sub_topic: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -325,6 +333,7 @@ async def generate_questions(
 @router.post("/select", response_model=SelectResponse)
 async def select_questions(
     payload: SelectRequest,
+    background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
@@ -339,6 +348,31 @@ async def select_questions(
     Returns fewer than requested if warehouse is empty.
     """
     selector = QuestionSelector(db)
+
+    # Review mode gate: allow only when due or below maintenance threshold
+    if payload.mode == "review":
+        scheduler = ReviewScheduler(db)
+        due_reviews = scheduler.get_due_reviews(payload.user_id, payload.language_id)
+        due_mappings = {item["mapping_id"] for item in due_reviews}
+
+        mastery_row = db.execute(text("""
+            SELECT mastery_score
+            FROM student_state
+            WHERE user_id = :u AND language_id = :l AND mapping_id = :m
+        """), {
+            "u": payload.user_id,
+            "l": payload.language_id,
+            "m": payload.mapping_id
+        }).fetchone()
+
+        mastery_score = mastery_row[0] if mastery_row else 0.0
+        threshold = get_config().get_maintenance_threshold()
+
+        if payload.mapping_id not in due_mappings and mastery_score >= threshold:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Review not due for this topic"
+            )
     
     # Select questions
     questions = selector.select_questions(
@@ -347,8 +381,29 @@ async def select_questions(
         mapping_id=payload.mapping_id,
         target_difficulty=payload.target_difficulty,
         count=payload.count,
-        difficulty_tolerance=payload.difficulty_tolerance
+        difficulty_tolerance=payload.difficulty_tolerance,
+        mode=payload.mode,
+        seen_ratio=payload.seen_ratio
     )
+
+    # Exam mode: auto-generate missing unseen questions
+    if payload.mode == "exam" and len(questions) < payload.count:
+        deficit = payload.count - len(questions)
+        config = get_config()
+        topic_info = config.mapping_to_topics.get(payload.mapping_id, {}).get(payload.language_id, {})
+        topic_name = topic_info.get("name") or payload.mapping_id
+        task_id = str(uuid.uuid4())
+
+        background_tasks.add_task(
+            _background_generate,
+            topic=topic_name,
+            language_id=payload.language_id,
+            mapping_id=payload.mapping_id,
+            difficulty=payload.target_difficulty,
+            count=deficit,
+            sub_topic=None,
+            task_id=task_id
+        )
     
     # Get warehouse status for this topic
     warehouse_status = selector.get_warehouse_status(

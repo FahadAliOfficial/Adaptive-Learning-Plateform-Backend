@@ -4,7 +4,7 @@ Aligned with final_curriculum.json and transition_map.json.
 """
 
 from pydantic import BaseModel, Field, validator
-from typing import List, Optional, Literal, Union
+from typing import List, Optional, Literal, Union, Dict, Any
 from uuid import UUID
 import json
 from pathlib import Path
@@ -45,6 +45,10 @@ class QuestionResult(BaseModel):
     time_spent: float = Field(..., gt=0, description="Seconds taken to answer")
     expected_time: float = Field(..., gt=0, description="Expected time for this difficulty")
     error_type: Optional[str] = Field(None, description="Error pattern if incorrect (from error_pattern_taxonomy)")
+    question_text: Optional[str] = Field(None, description="Question text snapshot for review")
+    code_snippet: Optional[str] = Field(None, description="Optional code snippet snapshot")
+    options: Optional[List[Dict[str, Any]]] = Field(None, description="Option snapshot with ids and text")
+    explanation: Optional[str] = Field(None, description="Explanation snapshot")
 
     @validator('difficulty')
     def validate_difficulty(cls, v):
@@ -64,7 +68,7 @@ class ExamStartRequest(BaseModel):
     user_id: str = Field(..., description="User UUID")
     language_id: LanguageIdType = Field(..., description="Language identifier from curriculum")
     major_topic_id: str = Field(..., description="e.g., 'PY_VAR_01', 'JS_FUNC_01'")
-    session_type: Literal["diagnostic", "practice"] = Field(default="practice")
+    session_type: Literal["diagnostic", "practice", "exam", "review"] = Field(default="practice")
 
     @validator('user_id')
     def validate_uuid(cls, v):
@@ -100,7 +104,7 @@ class ExamSubmissionPayload(BaseModel):
     session_id: str = Field(..., description="Session UUID from /api/exam/start")
     language_id: LanguageIdType = Field(..., description="Language identifier from curriculum")
     major_topic_id: str = Field(..., description="e.g., 'PY_VAR_01', 'JS_FUNC_01'")
-    session_type: Literal["diagnostic", "practice"] = Field(default="practice")
+    session_type: Literal["diagnostic", "practice", "exam", "review"] = Field(default="practice")
     results: List[QuestionResult] = Field(..., min_items=5, max_items=50)
     total_time_seconds: int = Field(..., gt=0, description="Total session duration")
 

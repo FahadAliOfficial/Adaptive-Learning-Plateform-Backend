@@ -7,6 +7,7 @@ from fastapi import FastAPI, Depends, HTTPException, status, Request, Background
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from typing import Optional
 
 from services.schemas import (
     ExamSubmissionPayload, 
@@ -23,6 +24,7 @@ from services.state_vector_service import StateVectorGenerator
 from services.user_service import UserService
 from services.review_scheduler import ReviewScheduler
 from services.pattern_analyzer import PatternAnalyzer
+from services.config import get_config
 from services.auth import get_current_user, get_current_active_user
 
 # ✅ Import from centralized database.py
@@ -392,6 +394,255 @@ async def get_exam_analysis(
         "bullets": analysis[1],  # PostgreSQL array → Python list
         "generated_at": analysis[2].isoformat() if analysis[2] else None,
         "error": analysis[3]
+    }
+
+
+@app.get("/api/exam/results/{session_id}")
+async def get_exam_results(
+    session_id: str,
+    current_user: dict = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get full exam results including questions snapshot, strong topics,
+    error patterns, and LLM-generated recommendations.
+
+    **Requires:** Valid JWT access token
+    """
+    import json
+
+    # Verify session belongs to user
+    session_check = db.execute(text("""
+        SELECT user_id
+        FROM exam_sessions
+        WHERE id = :sid
+    """), {"sid": session_id}).fetchone()
+
+    if not session_check:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session not found"
+        )
+
+    if session_check[0] != current_user["id"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Session belongs to another user"
+        )
+
+    result = db.execute(text("""
+        SELECT 
+            es.session_type,
+            es.language_id,
+            es.major_topic_id,
+            es.overall_score,
+            es.time_taken_seconds,
+            ed.questions_snapshot,
+            ed.recommendations,
+            ed.analysis_status,
+            ed.analysis_bullets
+        FROM exam_sessions es
+        JOIN exam_details ed ON ed.session_id = es.id
+        WHERE es.id = :sid
+    """), {"sid": session_id}).fetchone()
+
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Exam details not found"
+        )
+
+    session_type = result[0]
+    language_id = result[1]
+    major_topic_id = result[2]
+    overall_score = result[3] or 0.0
+    time_taken_seconds = result[4] or 0
+    questions_raw = result[5]
+    recommendations_raw = result[6]
+    analysis_status = result[7]
+    analysis_bullets = result[8]
+
+    if isinstance(questions_raw, str):
+        questions_data = json.loads(questions_raw)
+    else:
+        questions_data = questions_raw or {}
+
+    questions = questions_data.get("questions", []) if isinstance(questions_data, dict) else []
+
+    # Compute strong topics
+    config = get_config()
+    topic_stats = {}
+    for q in questions:
+        # Get topic name: prefer sub_topic, fallback to mapping name from config
+        topic = q.get("sub_topic")
+        if not topic or topic == "Unknown":
+            # Try to get a better name from config using language_id and major_topic_id
+            mapping_info = config.mapping_to_topics.get(major_topic_id, {}).get(language_id, {})
+            topic = mapping_info.get("name") or major_topic_id
+        
+        if topic not in topic_stats:
+            topic_stats[topic] = {"correct": 0, "total": 0}
+        topic_stats[topic]["total"] += 1
+        if q.get("is_correct"):
+            topic_stats[topic]["correct"] += 1
+
+    topic_scores = [
+        {
+            "name": topic,
+            "accuracy": round((data["correct"] / data["total"]) * 100)
+        }
+        for topic, data in topic_stats.items()
+        if data["total"] > 0
+    ]
+    topic_scores.sort(key=lambda x: x["accuracy"], reverse=True)
+
+    strong_topics = [t for t in topic_scores if t["accuracy"] >= 70]
+    if not strong_topics:
+        strong_topics = topic_scores[:3]
+
+    # Error patterns summary
+    error_counts = {}
+    for q in questions:
+        error_type = q.get("error_type")
+        if error_type:
+            error_counts[error_type] = error_counts.get(error_type, 0) + 1
+
+    error_patterns = [
+        {"error_type": k, "count": v}
+        for k, v in error_counts.items()
+    ]
+
+    # Recommendations payload
+    if isinstance(recommendations_raw, str):
+        recommendations = json.loads(recommendations_raw)
+    else:
+        recommendations = recommendations_raw or {}
+
+    resources = recommendations.get("resources", []) if isinstance(recommendations, dict) else []
+
+    return {
+        "session_id": session_id,
+        "session_type": session_type,
+        "language_id": language_id,
+        "major_topic_id": major_topic_id,
+        "overall_score": overall_score,
+        "accuracy": round(overall_score * 100),
+        "time_taken_seconds": time_taken_seconds,
+        "questions": questions,
+        "strong_topics": strong_topics,
+        "error_patterns": error_patterns,
+        "recommendations": resources,
+        "analysis_status": analysis_status,
+        "analysis_bullets": analysis_bullets
+    }
+
+
+@app.get("/api/sessions/history")
+async def get_session_history(
+    current_user: dict = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+    language_id: Optional[str] = None,
+    session_type: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0
+):
+    """
+    Get user's exam session history with optional filters.
+    
+    **Query Parameters:**
+    - language_id: Filter by language
+    - session_type: Filter by type (practice, exam, review)
+    - limit: Max sessions to return (default 50)
+    - offset: Pagination offset
+    
+    **Requires:** Valid JWT access token
+    """
+    user_id = current_user["id"]
+    
+    # Build query with filters
+    query = """
+        SELECT 
+            es.id,
+            es.session_type,
+            es.language_id,
+            es.major_topic_id,
+            es.overall_score,
+            es.difficulty_assigned,
+            es.time_taken_seconds,
+            es.created_at,
+            es.completed_at,
+            (
+                SELECT COUNT(*)
+                FROM jsonb_array_elements(ed.questions_snapshot->'questions') AS q
+            ) as question_count,
+            (
+                SELECT COUNT(*)
+                FROM jsonb_array_elements(ed.questions_snapshot->'questions') AS q
+                WHERE (q->>'is_correct')::boolean = true
+            ) as correct_count
+        FROM exam_sessions es
+        LEFT JOIN exam_details ed ON ed.session_id = es.id
+        WHERE es.user_id = :user_id
+          AND es.session_status = 'completed'
+    """
+    
+    params = {"user_id": user_id}
+    
+    if language_id:
+        query += " AND es.language_id = :language_id"
+        params["language_id"] = language_id
+    
+    if session_type:
+        query += " AND es.session_type = :session_type"
+        params["session_type"] = session_type
+    
+    query += " ORDER BY es.created_at DESC LIMIT :limit OFFSET :offset"
+    params["limit"] = limit
+    params["offset"] = offset
+    
+    sessions = db.execute(text(query), params).fetchall()
+    
+    # Get config for topic names
+    config = get_config()
+    
+    results = []
+    for session in sessions:
+        # Get topic name from config
+        mapping_info = config.mapping_to_topics.get(session[3], {}).get(session[2], {})
+        topic_name = mapping_info.get("name") or session[3]
+        
+        results.append({
+            "session_id": session[0],
+            "session_type": session[1],
+            "language_id": session[2],
+            "major_topic_id": session[3],
+            "topic_name": topic_name,
+            "overall_score": session[4] or 0.0,
+            "accuracy": round((session[4] or 0.0) * 100),
+            "difficulty": session[5] or 0.5,
+            "time_taken_seconds": session[6] or 0,
+            "created_at": session[7].isoformat() if session[7] else None,
+            "completed_at": session[8].isoformat() if session[8] else None,
+            "question_count": session[9] or 0,
+            "correct_count": session[10] or 0
+        })
+    
+    # Get total count for pagination
+    count_query = text("""
+        SELECT COUNT(*)
+        FROM exam_sessions
+        WHERE user_id = :user_id
+          AND session_status = 'completed'
+    """ + (" AND language_id = :language_id" if language_id else "") +
+          (" AND session_type = :session_type" if session_type else ""))
+    
+    total_count = db.execute(count_query, params).scalar()
+    
+    return {
+        "sessions": results,
+        "total_count": total_count,
+        "limit": limit,
+        "offset": offset
     }
 
 
