@@ -1,14 +1,17 @@
 """
-Admin Router - Handles administrative endpoints for user management.
+Admin Router - Handles administrative endpoints for user and question management.
 
-Provides endpoints for admin users to manage platform users and view analytics.
+Provides endpoints for admin users to manage platform users, questions, and view analytics.
 """
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import Optional
+from sqlalchemy import text, func
+from typing import Optional, List
+import hashlib
 
 from database import get_db
 from services.user_service import UserService
+from models.question_bank import QuestionBank, UserQuestionHistory
 from services.schemas import (
     AdminUserListResponse,
     AdminUserStatusUpdateRequest,
@@ -17,7 +20,16 @@ from services.schemas import (
     AdminUserUpdateResponse,
     AdminPasswordResetRequest,
     AdminPasswordResetResponse,
-    AdminUserAnalytics
+    AdminUserAnalytics,
+    AdminQuestion,
+    AdminQuestionListResponse,
+    AdminQuestionUpdateRequest,
+    AdminQuestionUpdateResponse,
+    AdminQuestionDeleteResponse,
+    AdminBulkActionRequest,
+    AdminBulkActionResponse,
+    AdminQuestionAnalytics,
+    AdminLowQualityQuestionsResponse
 )
 from services.auth import get_current_admin_user
 
@@ -106,6 +118,528 @@ async def update_user_status(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update user status: {str(e)}")
 
+# ==================== QUESTION BANK MANAGEMENT ====================
+
+@router.get("/questions", response_model=AdminQuestionListResponse)
+async def get_all_questions(
+    language_id: Optional[str] = Query(None, description="Filter by language"),
+    mapping_id: Optional[str] = Query(None, description="Filter by curriculum topic"),
+    is_verified: Optional[bool] = Query(None, description="Filter by verification status"),
+    min_quality: Optional[float] = Query(None, ge=0.0, le=1.0, description="Minimum quality score"),
+    max_difficulty: Optional[float] = Query(None, ge=0.0, le=1.0, description="Maximum difficulty"),
+    min_usage: Optional[int] = Query(None, ge=0, description="Minimum usage count"),
+    search: Optional[str] = Query(None, description="Search in question text"),
+    page: int = Query(1, ge=1, description="Page number"),
+    limit: int = Query(20, ge=1, le=100, description="Items per page"),
+    current_admin: dict = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Browse all questions with advanced filtering.
+    
+    **Use Case:** Admin question bank management page - browse and filter all questions
+    
+    **Example:**
+    GET /api/admin/questions?language_id=python_3&is_verified=true&page=1&limit=20
+    
+    **Returns:**
+    - Paginated list of questions with full metadata
+    - Total, verified, and unverified counts
+    
+    **Requires:** Admin authentication
+    """
+    try:
+        # Build query with filters
+        query = db.query(QuestionBank)
+        
+        if language_id:
+            query = query.filter(QuestionBank.language_id == language_id)
+        
+        if mapping_id:
+            query = query.filter(QuestionBank.mapping_id == mapping_id)
+        
+        if is_verified is not None:
+            query = query.filter(QuestionBank.is_verified == is_verified)
+        
+        if min_quality is not None:
+            query = query.filter(QuestionBank.quality_score >= min_quality)
+        
+        if max_difficulty is not None:
+            query = query.filter(QuestionBank.difficulty <= max_difficulty)
+        
+        if min_usage is not None:
+            query = query.filter(QuestionBank.times_used >= min_usage)
+        
+        if search:
+            # Search in question_data JSONB field
+            search_pattern = f"%{search}%"
+            query = query.filter(
+                func.cast(QuestionBank.question_data, db.Text).ilike(search_pattern)
+            )
+        
+        # Get total count
+        total_count = query.count()
+        
+        # Get verified/unverified counts
+        verified_count = db.query(func.count(QuestionBank.id)).filter(
+            QuestionBank.is_verified == True
+        ).scalar()
+        
+        unverified_count = total_count - verified_count
+        
+        # Paginate
+        offset = (page - 1) * limit
+        questions = query.order_by(
+            QuestionBank.created_at.desc()
+        ).offset(offset).limit(limit).all()
+        
+        # Convert to response format
+        question_list = [
+            AdminQuestion(
+                id=q.id,
+                language_id=q.language_id,
+                mapping_id=q.mapping_id,
+                sub_topic=q.sub_topic,
+                difficulty=q.difficulty,
+                question_data=q.question_data,
+                content_hash=q.content_hash,
+                is_verified=q.is_verified,
+                quality_score=q.quality_score,
+                times_used=q.times_used,
+                times_correct=q.times_correct,
+                calibrated_difficulty=q.calibrated_difficulty,
+                created_at=q.created_at.isoformat() if q.created_at else "",
+                created_by=q.created_by,
+                review_notes=getattr(q, 'review_notes', None)
+            )
+            for q in questions
+        ]
+        
+        return AdminQuestionListResponse(
+            questions=question_list,
+            total_count=total_count,
+            verified_count=verified_count,
+            unverified_count=unverified_count,
+            page=page,
+            limit=limit
+        )
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve questions: {str(e)}")
+
+
+@router.patch("/questions/{question_id}", response_model=AdminQuestionUpdateResponse)
+async def update_question(
+    question_id: str,
+    request: AdminQuestionUpdateRequest,
+    current_admin: dict = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Update question content and metadata.
+    
+    **Use Case:** Admin editing question text, options, difficulty, or quality score
+    
+    **Example:**
+    PATCH /api/admin/questions/123e4567-e89b-12d3-a456-426614174000
+    Body: {"difficulty": 0.7, "quality_score": 0.9}
+    
+    **Returns:**
+    - Success confirmation
+    - Updated question data
+    
+    **Requires:** Admin authentication
+    """
+    try:
+        from services.content_engine.jsonl_backup import JSONLBackup
+        
+        question = db.query(QuestionBank).filter(QuestionBank.id == question_id).first()
+        
+        if not question:
+            raise ValueError(f"Question {question_id} not found")
+        
+        # Update fields
+        if request.question_data is not None:
+            # Validate question structure
+            if not all(k in request.question_data for k in ["question_text", "options", "explanation"]):
+                raise ValueError("question_data must contain: question_text, options, explanation")
+            
+            if len(request.question_data.get("options", [])) != 4:
+                raise ValueError("question_data must have exactly 4 options")
+            
+            question.question_data = request.question_data
+            
+            # Recalculate content hash
+            content_str = str(request.question_data)
+            question.content_hash = hashlib.md5(content_str.encode()).hexdigest()
+        
+        if request.difficulty is not None:
+            question.difficulty = request.difficulty
+        
+        if request.quality_score is not None:
+            question.quality_score = request.quality_score
+        
+        if request.sub_topic is not None:
+            question.sub_topic = request.sub_topic
+        
+        db.commit()
+        db.refresh(question)
+        
+        # Update JSONL warehouse
+        try:
+            jsonl = JSONLBackup()
+            updated_data = {
+                'id': question.id,
+                'language_id': question.language_id,
+                'mapping_id': question.mapping_id,
+                'sub_topic': question.sub_topic,
+                'difficulty': question.difficulty,
+                'question_data': question.question_data,
+                'content_hash': question.content_hash,
+                'is_verified': question.is_verified,
+                'quality_score': question.quality_score,
+                'created_at': question.created_at.isoformat() if question.created_at else None,
+                'created_by': question.created_by
+            }
+            jsonl.update_question(question_id, updated_data)
+            print(f"✅ Updated question {question_id[:8]} in JSONL warehouse")
+        except Exception as e:
+            print(f"⚠️ Failed to update JSONL warehouse: {e}")
+        
+        updated_question = AdminQuestion(
+            id=question.id,
+            language_id=question.language_id,
+            mapping_id=question.mapping_id,
+            sub_topic=question.sub_topic,
+            difficulty=question.difficulty,
+            question_data=question.question_data,
+            content_hash=question.content_hash,
+            is_verified=question.is_verified,
+            quality_score=question.quality_score,
+            times_used=question.times_used,
+            times_correct=question.times_correct,
+            calibrated_difficulty=question.calibrated_difficulty,
+            created_at=question.created_at.isoformat() if question.created_at else "",
+            created_by=question.created_by,
+            review_notes=getattr(question, 'review_notes', None)
+        )
+        
+        return AdminQuestionUpdateResponse(
+            message="Question updated successfully",
+            updated_question=updated_question
+        )
+    
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update question: {str(e)}")
+
+
+@router.delete("/questions/{question_id}", response_model=AdminQuestionDeleteResponse)
+async def delete_question(
+    question_id: str,
+    current_admin: dict = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Delete a question permanently.
+    
+    **Use Case:** Admin removing low-quality or incorrect questions
+    
+    **Example:**
+    DELETE /api/admin/questions/123e4567-e89b-12d3-a456-426614174000
+    
+    **Returns:**
+    - Success confirmation
+    - Deleted question ID
+    
+    **Requires:** Admin authentication
+    
+    **WARNING:** This action is irreversible
+    """
+    try:
+        from services.content_engine.jsonl_backup import JSONLBackup
+        
+        question = db.query(QuestionBank).filter(QuestionBank.id == question_id).first()
+        
+        if not question:
+            raise ValueError(f"Question {question_id} not found")
+        
+        # Delete associated history records (optional - can keep for analytics)
+        # db.query(UserQuestionHistory).filter(UserQuestionHistory.question_id == question_id).delete()
+        
+        db.delete(question)
+        db.commit()
+        
+        # Delete from JSONL warehouse
+        try:
+            jsonl = JSONLBackup()
+            jsonl.delete_question(question_id)
+            print(f"✅ Deleted question {question_id[:8]} from JSONL warehouse")
+        except Exception as e:
+            print(f"⚠️ Failed to delete from JSONL warehouse: {e}")
+        
+        return AdminQuestionDeleteResponse(
+            message="Question deleted successfully",
+            deleted_id=question_id
+        )
+    
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete question: {str(e)}")
+
+
+@router.post("/questions/bulk-action", response_model=AdminBulkActionResponse)
+async def bulk_action_questions(
+    request: AdminBulkActionRequest,
+    current_admin: dict = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Perform bulk operations on multiple questions.
+    
+    **Actions:**
+    - approve: Mark all as verified
+    - delete: Delete all questions
+    - update_difficulty: Update difficulty for all (requires params.difficulty)
+    
+    **Use Case:** Admin bulk approving pending questions or bulk deleting low-quality questions
+    
+    **Example:**
+    POST /api/admin/questions/bulk-action
+    Body: {
+        "question_ids": ["id1", "id2", "id3"],
+        "action": "approve"
+    }
+    
+    **Returns:**
+    - Success/failure counts
+    - List of failed IDs
+    
+    **Requires:** Admin authentication
+    """
+    try:
+        affected_count = 0
+        failed_count = 0
+        failed_ids = []
+        
+        for question_id in request.question_ids:
+            try:
+                question = db.query(QuestionBank).filter(QuestionBank.id == question_id).first()
+                
+                if not question:
+                    failed_count += 1
+                    failed_ids.append(question_id)
+                    continue
+                
+                if request.action == "approve":
+                    question.is_verified = True
+                    affected_count += 1
+                    
+                    # Update JSONL warehouse
+                    try:
+                        from services.content_engine.jsonl_backup import JSONLBackup
+                        jsonl = JSONLBackup()
+                        updated_data = {
+                            'id': question.id,
+                            'language_id': question.language_id,
+                            'mapping_id': question.mapping_id,
+                            'sub_topic': question.sub_topic,
+                            'difficulty': question.difficulty,
+                            'question_data': question.question_data,
+                            'content_hash': question.content_hash,
+                            'is_verified': True,
+                            'quality_score': question.quality_score,
+                            'created_at': question.created_at.isoformat() if question.created_at else None,
+                            'created_by': question.created_by
+                        }
+                        jsonl.update_question(question_id, updated_data)
+                    except Exception as e:
+                        print(f"⚠️ Failed to update {question_id[:8]} in JSONL: {e}")
+                
+                elif request.action == "delete":
+                    db.delete(question)
+                    affected_count += 1
+                    
+                    # Delete from JSONL warehouse
+                    try:
+                        from services.content_engine.jsonl_backup import JSONLBackup
+                        jsonl = JSONLBackup()
+                        jsonl.delete_question(question_id)
+                    except Exception as e:
+                        print(f"⚠️ Failed to delete {question_id[:8]} from JSONL: {e}")
+                
+                elif request.action == "update_difficulty":
+                    if not request.params or "difficulty" not in request.params:
+                        raise ValueError("update_difficulty requires params.difficulty")
+                    question.difficulty = request.params["difficulty"]
+                    affected_count += 1
+                
+                else:
+                    raise ValueError(f"Invalid action: {request.action}")
+            
+            except Exception as e:
+                failed_count += 1
+                failed_ids.append(question_id)
+                print(f"Failed to process {question_id}: {e}")
+        
+        db.commit()
+        
+        action_messages = {
+            "approve": f"Approved {affected_count} questions",
+            "delete": f"Deleted {affected_count} questions",
+            "update_difficulty": f"Updated difficulty for {affected_count} questions"
+        }
+        
+        return AdminBulkActionResponse(
+            message=action_messages.get(request.action, f"Processed {affected_count} questions"),
+            affected_count=affected_count,
+            failed_count=failed_count,
+            failed_ids=failed_ids
+        )
+    
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Bulk action failed: {str(e)}")
+
+
+@router.get("/questions/{question_id}/analytics", response_model=AdminQuestionAnalytics)
+async def get_question_analytics(
+    question_id: str,
+    current_admin: dict = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get performance analytics for a specific question.
+    
+    **Use Case:** Admin reviewing question quality and difficulty calibration
+    
+    **Example:**
+    GET /api/admin/questions/123e4567-e89b-12d3-a456-426614174000/analytics
+    
+    **Returns:**
+    - Usage count, accuracy rate
+    - Average time spent
+    - Quality metrics
+    - Calibrated vs assigned difficulty
+    
+    **Requires:** Admin authentication
+    """
+    try:
+        question = db.query(QuestionBank).filter(QuestionBank.id == question_id).first()
+        
+        if not question:
+            raise ValueError(f"Question {question_id} not found")
+        
+        # Calculate accuracy rate
+        accuracy_rate = 0.0
+        if question.times_used > 0:
+            accuracy_rate = (question.times_correct / question.times_used) * 100
+        
+        # Get average time spent from history
+        avg_time_result = db.query(func.avg(UserQuestionHistory.time_spent_seconds)).filter(
+            UserQuestionHistory.question_id == question_id
+        ).scalar()
+        
+        avg_time_spent = float(avg_time_result) if avg_time_result else None
+        
+        return AdminQuestionAnalytics(
+            question_id=question.id,
+            times_used=question.times_used,
+            times_correct=question.times_correct,
+            accuracy_rate=round(accuracy_rate, 2),
+            avg_time_spent=round(avg_time_spent, 2) if avg_time_spent else None,
+            quality_score=question.quality_score,
+            calibrated_difficulty=question.calibrated_difficulty,
+            assigned_difficulty=question.difficulty
+        )
+    
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve analytics: {str(e)}")
+
+
+@router.get("/questions/low-quality", response_model=AdminLowQualityQuestionsResponse)
+async def get_low_quality_questions(
+    limit: int = Query(50, ge=1, le=200, description="Maximum questions to return"),
+    current_admin: dict = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get questions that need review based on quality criteria.
+    
+    **Criteria:**
+    - Quality score < 0.5
+    - Accuracy rate < 30% (if used enough times)
+    - Very high or very low accuracy (possible issue)
+    
+    **Use Case:** Admin quality assurance - identify problematic questions
+    
+    **Example:**
+    GET /api/admin/questions/low-quality?limit=50
+    
+    **Returns:**
+    - List of low-quality questions
+    - Criteria used for identification
+    
+    **Requires:** Admin authentication
+    """
+    try:
+        # Find questions with low quality score
+        low_quality_questions = db.query(QuestionBank).filter(
+            QuestionBank.quality_score < 0.5
+        ).all()
+        
+        # Find questions with poor accuracy (used at least 10 times)
+        poor_accuracy_questions = db.query(QuestionBank).filter(
+            QuestionBank.times_used >= 10,
+            (QuestionBank.times_correct * 1.0 / QuestionBank.times_used) < 0.3
+        ).all()
+        
+        # Combine and deduplicate
+        all_low_quality = {q.id: q for q in low_quality_questions}
+        for q in poor_accuracy_questions:
+            all_low_quality[q.id] = q
+        
+        questions_list = list(all_low_quality.values())[:limit]
+        
+        # Convert to response format
+        question_responses = [
+            AdminQuestion(
+                id=q.id,
+                language_id=q.language_id,
+                mapping_id=q.mapping_id,
+                sub_topic=q.sub_topic,
+                difficulty=q.difficulty,
+                question_data=q.question_data,
+                content_hash=q.content_hash,
+                is_verified=q.is_verified,
+                quality_score=q.quality_score,
+                times_used=q.times_used,
+                times_correct=q.times_correct,
+                calibrated_difficulty=q.calibrated_difficulty,
+                created_at=q.created_at.isoformat() if q.created_at else "",
+                created_by=q.created_by,
+                review_notes=getattr(q, 'review_notes', None)
+            )
+            for q in questions_list
+        ]
+        
+        return AdminLowQualityQuestionsResponse(
+            questions=question_responses,
+            total_count=len(question_responses),
+            criteria={
+                "low_quality_score": "< 0.5",
+                "poor_accuracy": "< 30% (min 10 uses)",
+                "suspicious_accuracy": "> 95% or < 5% (min 20 uses)"
+            }
+        )
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve low-quality questions: {str(e)}")
 
 @router.get("/users/analytics", response_model=AdminUserAnalytics)
 async def get_user_analytics(
