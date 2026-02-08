@@ -146,8 +146,16 @@ class QuestionSelector:
             func.random()
         ).limit(count * 3).all()
         
-        random.shuffle(questions)
-        return questions[:count]
+        # Deduplicate to prevent same question appearing twice
+        seen_ids_set = set()
+        unique_questions = []
+        for q in questions:
+            if q.id not in seen_ids_set:
+                seen_ids_set.add(q.id)
+                unique_questions.append(q)
+        
+        random.shuffle(unique_questions)
+        return unique_questions[:count]
 
     def _select_unseen_questions(
         self,
@@ -178,8 +186,16 @@ class QuestionSelector:
             func.random()
         ).limit(count * 3).all()
         
-        random.shuffle(questions)
-        return questions[:count]
+        # Deduplicate to prevent same question appearing twice
+        seen_ids_set = set()
+        unique_questions = []
+        for q in questions:
+            if q.id not in seen_ids_set:
+                seen_ids_set.add(q.id)
+                unique_questions.append(q)
+        
+        random.shuffle(unique_questions)
+        return unique_questions[:count]
 
     def _select_exam_unseen(
         self,
@@ -247,8 +263,16 @@ class QuestionSelector:
             )
             combined.extend(fallback)
         
-        random.shuffle(combined)
-        return combined[:count]
+        # Deduplicate to prevent same question appearing twice
+        seen_ids_set = set()
+        unique_questions = []
+        for q in combined:
+            if q.id not in seen_ids_set:
+                seen_ids_set.add(q.id)
+                unique_questions.append(q)
+        
+        random.shuffle(unique_questions)
+        return unique_questions[:count]
 
     def _select_review_mix(
         self,
@@ -294,8 +318,16 @@ class QuestionSelector:
             )
             combined.extend(fallback)
         
-        random.shuffle(combined)
-        return combined[:count]
+        # Deduplicate to prevent same question appearing twice
+        seen_ids_set = set()
+        unique_questions = []
+        for q in combined:
+            if q.id not in seen_ids_set:
+                seen_ids_set.add(q.id)
+                unique_questions.append(q)
+        
+        random.shuffle(unique_questions)
+        return unique_questions[:count]
     
     def _select_strategy_1(self, user_id, language_id, mapping_id, 
                           target_diff, tolerance, count) -> List[QuestionBank]:
