@@ -384,10 +384,18 @@ async def update_profile(
             detail="language_id is required"
         )
     
-    # Update user's language preference
+    # Update user's language preference and set as primary
     update_query = text("""
         UPDATE users 
-        SET last_active_language = :language_id
+        SET last_active_language = :language_id,
+            primary_language = COALESCE(primary_language, :language_id),
+            languages_learning = CASE 
+                WHEN languages_learning IS NULL OR languages_learning = '[]'::jsonb
+                THEN jsonb_build_array(:language_id)
+                WHEN NOT languages_learning ? :language_id
+                THEN languages_learning || jsonb_build_array(:language_id)
+                ELSE languages_learning
+            END
         WHERE id = :user_id
     """)
     
