@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Literal
 from datetime import datetime
 import uuid
+import threading
 
 from database import get_db
 from models.question_bank import QuestionBank, UserQuestionHistory
@@ -22,6 +23,16 @@ from sqlalchemy import text
 
 router = APIRouter(prefix="/question-bank", tags=["Question Bank"])
 
+# In-memory tracking for active question requests
+# session_id -> {delivered_ids: set, total_requested: int, mode: str, params: dict}
+active_sessions: Dict[str, Dict] = {}
+sessions_lock = threading.Lock()
+
+# Track active background generation tasks to prevent duplicates
+# key: (language_id, mapping_id, difficulty) -> task_id
+active_generation_tasks: Dict[tuple, str] = {}
+generation_lock = threading.Lock()
+
 
 # ==================== REQUEST/RESPONSE SCHEMAS ====================
 
@@ -31,7 +42,7 @@ class GenerateRequest(BaseModel):
     language_id: str = Field(..., description="Language: python_3, javascript_es6, etc.")
     mapping_id: str = Field(..., description="Curriculum node: UNIV_LOOP, UNIV_VAR, etc.")
     difficulty: float = Field(..., ge=0.0, le=1.0, description="Difficulty: 0.0 (easy) to 1.0 (hard)")
-    count: int = Field(default=10, ge=1, le=50, description="Number of questions to generate")
+    count: int = Field(default=10, ge=1, le=50, description="Number of questions to generate (batch mode)")
     sub_topic: Optional[str] = Field(None, description="Optional sub-topic refinement")
 
 
@@ -45,6 +56,7 @@ class GenerateResponse(BaseModel):
 class SelectRequest(BaseModel):
     """Request to select questions for exam."""
     user_id: str = Field(..., description="Student UUID")
+    session_id: str = Field(..., description="Exam session ID for tracking")
     language_id: str
     mapping_id: str
     target_difficulty: float = Field(..., ge=0.0, le=1.0)
@@ -73,6 +85,8 @@ class SelectResponse(BaseModel):
     """Response from select endpoint."""
     questions: List[QuestionResponse]
     total_selected: int
+    total_requested: int
+    more_questions_loading: bool
     warehouse_status: Dict
 
 
@@ -117,6 +131,17 @@ class AdminReviewResponse(BaseModel):
     question_id: str
     action: str
     message: str
+
+
+class AdminBulkGenerateRequest(BaseModel):
+    """Admin request for bulk question generation (warehouse replenishment)."""
+    topic: str = Field(..., description="Topic name")
+    language_id: str = Field(..., description="Language: python_3, javascript_es6, etc.")
+    mapping_id: str = Field(..., description="Curriculum node: UNIV_LOOP, UNIV_VAR, etc.")
+    difficulty: float = Field(..., ge=0.0, le=1.0, description="Difficulty: 0.0-1.0")
+    count: int = Field(default=50, ge=1, le=200, description="Number of questions (1-200 for admin)")
+    sub_topic: Optional[str] = Field(None, description="Optional sub-topic")
+    priority: str = Field(default="normal", description="Generation priority: normal, high")
 
 
 class QuestionReportRequest(BaseModel):
@@ -168,113 +193,161 @@ def _background_generate(
     difficulty: float,
     count: int,
     sub_topic: Optional[str],
-    task_id: str
+    task_id: str,
+    retry_count: int = 0,
+    max_retries: int = 2
 ):
     """
-    Background task for question generation.
+    Background task for batch question generation.
     This runs asynchronously so API returns immediately.
     Saves to both database AND JSONL backup for durability.
+    
+    Uses optimized batch generation (1 API call for N questions).
+    For large batches (>50), splits into multiple API calls automatically.
+    
+    Auto-retries if insufficient questions generated (up to max_retries).
     """
     from database import get_db_context
     from services.content_engine.jsonl_backup import JSONLBackup
     
-    print(f"[Background Task {task_id[:8]}] Starting generation of {count} questions...")
+    retry_suffix = f" (Retry {retry_count}/{max_retries})" if retry_count > 0 else ""
+    print(f"[Background Task {task_id[:8]}] Starting batch generation of {count} questions...{retry_suffix}")
     
     try:
         factory = OpenAIFactory()
         validator = MultiLanguageValidator()
-        jsonl = JSONLBackup()  # Initialize JSONL backup
+        jsonl = JSONLBackup()
         
-        generated = []
-        backup_questions = []  # Collect for batch JSONL backup
+        all_generated = []
+        all_backup_questions = []
         
-        for i in range(count):
-            try:
-                # Generate question
-                question_data = factory.generate_question(
-                    topic=topic,
-                    language_id=language_id,
-                    mapping_id=mapping_id,
-                    difficulty=difficulty,
-                    sub_topic=sub_topic
-                )
-                
-                # Calculate content hash for deduplication
-                content_hash = validator.generate_content_hash(question_data)
-                
-                # Create database record
-                with get_db_context() as db:
-                    # Check for duplicate
-                    existing = db.query(QuestionBank).filter(
-                        QuestionBank.content_hash == content_hash
-                    ).first()
-                    
-                    if existing:
-                        print(f"[Task {task_id[:8]}] Skipped duplicate question {i+1}/{count}")
-                        continue
-                    
-                    # Auto-approve high-quality questions (>= 70%)
-                    quality_score = question_data.get('quality_score', 0.5)
-                    auto_approved = quality_score >= 0.70
-                    
-                    question_id = str(uuid.uuid4())
-                    question = QuestionBank(
-                        id=question_id,
-                        language_id=language_id,
-                        mapping_id=mapping_id,
-                        sub_topic=sub_topic or question_data.get('sub_topic'),
-                        difficulty=difficulty,
-                        question_data=question_data,
-                        content_hash=content_hash,
-                        is_verified=auto_approved,
-                        quality_score=quality_score
-                    )
-                    
-                    db.add(question)
-                    db.commit()
-                    
-                    generated.append(question_id)
-                    
-                    # Log auto-approval
-                    if auto_approved:
-                        print(f"[Task {task_id[:8]}] ✅ Auto-approved question {i+1}/{count}: {question_id[:8]} (quality: {int(quality_score*100)}%)")
-                    else:
-                        print(f"[Task {task_id[:8]}] Generated question {i+1}/{count}: {question_id[:8]} (quality: {int(quality_score*100)}% - needs review)")
-                    
-                    # Prepare for JSONL backup
-                    backup_data = {
-                        'id': question_id,
-                        'language_id': language_id,
-                        'mapping_id': mapping_id,
-                        'sub_topic': sub_topic,
-                        'difficulty': difficulty,
-                        'content_hash': content_hash,
-                        'question_data': question_data,
-                        'created_at': question.created_at.isoformat() if question.created_at else None,
-                        'is_verified': auto_approved,
-                        'quality_score': quality_score
-                    }
-                    backup_questions.append(backup_data)
-                    
+        # Split large batches into chunks of 50 for reliability
+        BATCH_SIZE = 50
+        num_batches = (count + BATCH_SIZE - 1) // BATCH_SIZE
+        
+        for batch_num in range(num_batches):
+            batch_start = batch_num * BATCH_SIZE
+            batch_count = min(BATCH_SIZE, count - batch_start)
             
-            except Exception as e:
-                print(f"[Task {task_id[:8]}] Error generating question {i+1}: {e}")
-                continue
+            print(f"[Task {task_id[:8]}] Processing batch {batch_num + 1}/{num_batches} ({batch_count} questions)...")
+            
+            # BATCH GENERATION - Single API call per batch
+            questions_data = factory.generate_batch(
+                topic=topic,
+                language_id=language_id,
+                mapping_id=mapping_id,
+                difficulty=difficulty,
+                count=batch_count,
+                sub_topic=sub_topic
+            )
+            
+            print(f"[Task {task_id[:8]}] Batch {batch_num + 1} API returned {len(questions_data)} valid questions")
+            
+            # Process batch results
+            with get_db_context() as db:
+                for i, question_data in enumerate(questions_data, 1):
+                    try:
+                        # Calculate content hash for deduplication
+                        content_hash = validator.generate_content_hash(question_data)
+                        
+                        # Check for duplicate
+                        existing = db.query(QuestionBank).filter(
+                            QuestionBank.content_hash == content_hash
+                        ).first()
+                        
+                        if existing:
+                            print(f"[Task {task_id[:8]}] Batch {batch_num + 1}: Skipped duplicate question {i}/{len(questions_data)}")
+                            continue
+                        
+                        # Auto-approve high-quality questions (>= 70%)
+                        quality_score = question_data.get('quality_score', 0.5)
+                        auto_approved = quality_score >= 0.70
+                        
+                        question_id = str(uuid.uuid4())
+                        question = QuestionBank(
+                            id=question_id,
+                            language_id=language_id,
+                            mapping_id=mapping_id,
+                            sub_topic=sub_topic or question_data.get('sub_topic'),
+                            difficulty=difficulty,
+                            question_data=question_data,
+                            content_hash=content_hash,
+                            is_verified=auto_approved,
+                            quality_score=quality_score
+                        )
+                        
+                        db.add(question)
+                        all_generated.append(question_id)
+                        
+                        # Log auto-approval
+                        if auto_approved:
+                            print(f"[Task {task_id[:8]}] Batch {batch_num + 1}: ✅ Auto-approved question {i}/{len(questions_data)}: {question_id[:8]} (quality: {int(quality_score*100)}%)")
+                        else:
+                            print(f"[Task {task_id[:8]}] Batch {batch_num + 1}: Generated question {i}/{len(questions_data)}: {question_id[:8]} (quality: {int(quality_score*100)}% - needs review)")
+                        
+                        # Prepare for JSONL backup
+                        backup_data = {
+                            'id': question_id,
+                            'language_id': language_id,
+                            'mapping_id': mapping_id,
+                            'sub_topic': sub_topic,
+                            'difficulty': difficulty,
+                            'content_hash': content_hash,
+                            'question_data': question_data,
+                            'created_at': question.created_at.isoformat() if question.created_at else None,
+                            'is_verified': auto_approved,
+                            'quality_score': quality_score
+                        }
+                        all_backup_questions.append(backup_data)
+                        
+                    except Exception as e:
+                        print(f"[Task {task_id[:8]}] Batch {batch_num + 1}: Error saving question {i}: {e}")
+                        continue
+                
+                # Commit batch
+                db.commit()
         
         # Backup to JSONL (batch operation for performance)
-        if backup_questions:
+        if all_backup_questions:
             try:
-                backed_up = jsonl.append_batch(backup_questions)
+                backed_up = jsonl.append_batch(all_backup_questions)
                 print(f"[Task {task_id[:8]}] ✅ Backed up {backed_up} questions to JSONL")
             except Exception as e:
                 print(f"[Task {task_id[:8]}] ⚠️ JSONL backup failed (data safe in DB): {e}")
         
-        print(f"[Background Task {task_id[:8]}] Completed! Generated {len(generated)}/{count} questions")
+        generated_count = len(all_generated)
+        print(f"[Background Task {task_id[:8]}] ✅ Completed! Generated {generated_count}/{count} questions ({num_batches} API call{'s' if num_batches > 1 else ''})")
+        
+        # Auto-retry if we didn't generate enough questions
+        deficit = count - generated_count
+        if deficit > 0 and retry_count < max_retries:
+            print(f"[Task {task_id[:8]}] 🔄 Deficit of {deficit} questions detected. Triggering retry {retry_count + 1}/{max_retries}...")
+            import threading
+            retry_thread = threading.Thread(
+                target=_background_generate,
+                args=(topic, language_id, mapping_id, difficulty, deficit, sub_topic, task_id, retry_count + 1, max_retries)
+            )
+            retry_thread.daemon = True
+            retry_thread.start()
+        else:
+            # No more retries needed - unregister this task
+            task_key = (language_id, mapping_id, difficulty)
+            with generation_lock:
+                if active_generation_tasks.get(task_key) == task_id:
+                    del active_generation_tasks[task_key]
+                    print(f"[Task {task_id[:8]}] 🏁 Generation complete. Task unregistered.")
     
     except Exception as e:
         print(f"[Background Task {task_id[:8]}] FAILED: {e}")
         import traceback
         traceback.print_exc()
+        
+        # Unregister task on error (don't retry on exceptions)
+        task_key = (language_id, mapping_id, difficulty)
+        with generation_lock:
+            if active_generation_tasks.get(task_key) == task_id:
+                del active_generation_tasks[task_key]
+                print(f"[Task {task_id[:8]}] ❌ Task unregistered after error.")
 
 
 # ==================== API ENDPOINTS ====================
@@ -320,12 +393,12 @@ async def generate_questions(
         task_id=task_id
     )
     
-    # Estimate time (1-2 seconds per question with OpenAI API)
-    estimated_time = payload.count * 1.5
+    # Estimate time (batch mode: ~0.3s per question with 1 API call)
+    estimated_time = max(2, payload.count * 0.3)
     
     return GenerateResponse(
         task_id=task_id,
-        message=f"Generation started. Creating {payload.count} questions for '{payload.topic}'.",
+        message=f"Batch generation started. Creating {payload.count} questions for '{payload.topic}' (1 API call).",
         estimated_time_seconds=int(estimated_time)
     )
 
@@ -386,24 +459,56 @@ async def select_questions(
         seen_ratio=payload.seen_ratio
     )
 
-    # Exam mode: auto-generate missing unseen questions
-    if payload.mode == "exam" and len(questions) < payload.count:
+    # Track session for dynamic loading
+    more_loading = False
+    with sessions_lock:
+        delivered_ids = {q.id for q in questions}
+        active_sessions[payload.session_id] = {
+            "delivered_ids": delivered_ids,
+            "total_requested": payload.count,
+            "mode": payload.mode,
+            "params": {
+                "user_id": payload.user_id,
+                "language_id": payload.language_id,
+                "mapping_id": payload.mapping_id,
+                "target_difficulty": payload.target_difficulty,
+                "difficulty_tolerance": payload.difficulty_tolerance,
+                "seen_ratio": payload.seen_ratio
+            }
+        }
+
+    # Auto-generate missing questions for exam AND practice modes
+    if payload.mode in ["exam", "practice"] and len(questions) < payload.count:
         deficit = payload.count - len(questions)
         config = get_config()
         topic_info = config.mapping_to_topics.get(payload.mapping_id, {}).get(payload.language_id, {})
         topic_name = topic_info.get("name") or payload.mapping_id
-        task_id = str(uuid.uuid4())
+        task_key = (payload.language_id, payload.mapping_id, payload.target_difficulty)
+        
+        # Check if generation task already running for this topic
+        with generation_lock:
+            existing_task_id = active_generation_tasks.get(task_key)
+            if existing_task_id:
+                print(f"🔄 [{payload.mode.upper()}] Generation already in progress (task {existing_task_id[:8]}) for {topic_name}. Reusing...")
+                more_loading = True
+            else:
+                # Start new generation task
+                task_id = str(uuid.uuid4())
+                active_generation_tasks[task_key] = task_id
+                more_loading = True
+                
+                print(f"🔧 [{payload.mode.upper()}] Warehouse low! Generating {deficit} questions for {topic_name}...")
 
-        background_tasks.add_task(
-            _background_generate,
-            topic=topic_name,
-            language_id=payload.language_id,
-            mapping_id=payload.mapping_id,
-            difficulty=payload.target_difficulty,
-            count=deficit,
-            sub_topic=None,
-            task_id=task_id
-        )
+                background_tasks.add_task(
+                    _background_generate,
+                    topic=topic_name,
+                    language_id=payload.language_id,
+                    mapping_id=payload.mapping_id,
+                    difficulty=payload.target_difficulty,
+                    count=deficit,
+                    sub_topic=None,
+                    task_id=task_id
+                )
     
     # Get warehouse status for this topic
     warehouse_status = selector.get_warehouse_status(
@@ -416,8 +521,100 @@ async def select_questions(
     return SelectResponse(
         questions=[QuestionResponse.from_orm(q) for q in questions],
         total_selected=len(questions),
+        total_requested=payload.count,
+        more_questions_loading=more_loading,
         warehouse_status=warehouse_status
     )
+
+
+@router.get("/poll/{session_id}", response_model=SelectResponse)
+async def poll_new_questions(
+    session_id: str,
+    current_user: dict = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Poll for newly generated questions for an active session.
+    Returns only questions that haven't been delivered yet.
+    """
+    with sessions_lock:
+        session_data = active_sessions.get(session_id)
+    
+    if not session_data:
+        return SelectResponse(
+            questions=[],
+            total_selected=0,
+            total_requested=0,
+            more_questions_loading=False,
+            warehouse_status={}
+        )
+    
+    params = session_data["params"]
+    delivered_ids = session_data["delivered_ids"]
+    total_requested = session_data["total_requested"]
+    
+    print(f"[Poll {session_id[:8]}] Polling: delivered={len(delivered_ids)}, total_requested={total_requested}")
+    
+    # Fetch questions from database
+    selector = QuestionSelector(db)
+    all_questions = selector.select_questions(
+        user_id=params["user_id"],
+        language_id=params["language_id"],
+        mapping_id=params["mapping_id"],
+        target_difficulty=params["target_difficulty"],
+        count=total_requested,
+        difficulty_tolerance=params["difficulty_tolerance"],
+        mode=session_data["mode"],
+        seen_ratio=params["seen_ratio"]
+    )
+    
+    print(f"[Poll {session_id[:8]}] Selector returned {len(all_questions)} total questions")
+    
+    # Filter to only new questions
+    new_questions = [q for q in all_questions if q.id not in delivered_ids]
+    
+    print(f"[Poll {session_id[:8]}] Found {len(new_questions)} NEW questions to return")
+    
+    # Update delivered set
+    with sessions_lock:
+        if session_id in active_sessions:
+            for q in new_questions:
+                active_sessions[session_id]["delivered_ids"].add(q.id)
+            current_total = len(active_sessions[session_id]["delivered_ids"])
+            more_loading = current_total < total_requested
+        else:
+            more_loading = False
+    
+    # Get warehouse status
+    warehouse_status = selector.get_warehouse_status(
+        language_id=params["language_id"],
+        mapping_id=params["mapping_id"],
+        difficulty=params["target_difficulty"],
+        difficulty_tolerance=params["difficulty_tolerance"]
+    )
+    
+    return SelectResponse(
+        questions=[QuestionResponse.from_orm(q) for q in new_questions],
+        total_selected=len(new_questions),
+        total_requested=total_requested,
+        more_questions_loading=more_loading,
+        warehouse_status=warehouse_status
+    )
+
+
+@router.delete("/session/{session_id}")
+async def close_session(
+    session_id: str
+):
+    """
+    Close an active question loading session (cleanup).
+    No authentication required - session cleanup only.
+    """
+    with sessions_lock:
+        if session_id in active_sessions:
+            del active_sessions[session_id]
+    
+    return {"message": "Session closed"}
 
 
 @router.post("/mark-seen", response_model=MarkSeenResponse)
@@ -640,6 +837,72 @@ async def get_pending_questions(
             for q in questions
         ]
     }
+
+
+@router.post("/admin/bulk-generate", response_model=GenerateResponse, status_code=status.HTTP_202_ACCEPTED)
+async def admin_bulk_generate_questions(
+    payload: AdminBulkGenerateRequest,
+    background_tasks: BackgroundTasks,
+    current_user: dict = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Admin endpoint for bulk question generation (warehouse replenishment).
+    
+    Higher limits than regular generate endpoint:
+    - Regular: 50 questions max
+    - Admin: 200 questions max
+    
+    Uses optimized batch generation (1 API call for N questions).
+    Automatically approves questions with quality_score >= 70%.
+    
+    Use Cases:
+    - Warehouse replenishment (stock low topics)
+    - Curriculum expansion (new topics)
+    - Quality improvement (replace poor questions)
+    
+    **Requires:** Admin authentication
+    """
+    # Validate language
+    if payload.language_id not in ["python_3", "javascript_es6", "java_17", "cpp_20", "go_1_21"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported language: {payload.language_id}"
+        )
+    
+    # Validate count doesn't exceed admin limit
+    if payload.count > 200:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Admin bulk generation limited to 200 questions per request"
+        )
+    
+    # Generate task ID
+    task_id = str(uuid.uuid4())
+    
+    # Schedule background generation
+    background_tasks.add_task(
+        _background_generate,
+        topic=payload.topic,
+        language_id=payload.language_id,
+        mapping_id=payload.mapping_id,
+        difficulty=payload.difficulty,
+        count=payload.count,
+        sub_topic=payload.sub_topic,
+        task_id=task_id
+    )
+    
+    # Estimate time (batch mode: ~0.3s per question, but larger batches may need multiple API calls)
+    # For batches >50, we might split into multiple calls
+    api_calls_needed = (payload.count + 49) // 50  # Ceiling division
+    estimated_time = max(2, api_calls_needed * 50 * 0.3)
+    
+    return GenerateResponse(
+        task_id=task_id,
+        message=f"Admin bulk generation started. Creating {payload.count} questions for '{payload.topic}' (priority: {payload.priority}).",
+        estimated_time_seconds=int(estimated_time)
+    )
+
 
 
 @router.post("/report", response_model=QuestionReportResponse)

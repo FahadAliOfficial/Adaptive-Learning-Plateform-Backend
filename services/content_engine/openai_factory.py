@@ -340,6 +340,12 @@ Return ONLY valid JSON matching the structure in your system instructions."""
         
         return 0.5  # Default fallback
     
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type((Exception,)),
+        reraise=True
+    )
     def generate_batch(
         self,
         topic: str,
@@ -350,41 +356,177 @@ Return ONLY valid JSON matching the structure in your system instructions."""
         sub_topic: Optional[str] = None
     ) -> List[Dict]:
         """
-        Generate multiple questions (with deduplication).
+        Generate multiple questions in a SINGLE API call (more efficient).
         
         Args:
-            count: Number of unique questions to generate
+            count: Number of questions to generate (1-20 recommended per call)
         
         Returns:
-            List of question dictionaries (may be less than count if duplicates occur)
+            List of question dictionaries with validation applied
         """
-        questions = []
+        # Sanitize input
+        safe_topic = self.sanitize_topic(topic)
+        
+        # Build batch prompt
+        system_prompt, user_prompt = self._build_batch_prompt(
+            safe_topic, language_id, mapping_id, difficulty, count, sub_topic
+        )
+        
+        # Single API call for all questions
+        response = self.client.chat.completions.create(
+            model=self.MODEL_NAME,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=self.TEMPERATURE,
+            max_tokens=4096 if count <= 10 else 8192,  # Scale token limit
+            response_format={"type": "json_object"},
+            timeout=60
+        )
+        
+        # Parse batch response
+        raw_text = response.choices[0].message.content
+        batch_data = self._parse_batch_response(raw_text, count)
+        
+        # Validate and enrich each question
+        validated_questions = []
         seen_hashes = set()
-        attempts = 0
-        max_attempts = count * 2  # Allow some retries for duplicates
         
-        while len(questions) < count and attempts < max_attempts:
-            attempts += 1
-            
+        for idx, q_data in enumerate(batch_data['questions']):
             try:
-                q = self.generate_question(
-                    topic, language_id, mapping_id, difficulty, sub_topic
-                )
+                # Validate options quality
+                is_valid, error = MultiLanguageValidator.validate_option_quality(q_data)
+                if not is_valid:
+                    print(f"⚠️ Question {idx+1} failed validation: {error}")
+                    continue
                 
-                # Check for duplicate
-                content_hash = MultiLanguageValidator.generate_content_hash(q)
-                if content_hash not in seen_hashes:
-                    q['content_hash'] = content_hash
-                    questions.append(q)
-                    seen_hashes.add(content_hash)
-                else:
-                    print(f"⚠️ Duplicate question detected (hash collision), retrying...")
-            
+                # Validate syntax if code present
+                if q_data.get('code_snippet'):
+                    is_valid, error = MultiLanguageValidator.validate_syntax(
+                        q_data['code_snippet'], language_id
+                    )
+                    if not is_valid:
+                        print(f"⚠️ Question {idx+1} has syntax error: {error}")
+                        continue
+                
+                # Add metadata
+                q_data['language_id'] = language_id
+                q_data['mapping_id'] = mapping_id
+                q_data['difficulty'] = difficulty
+                q_data['sub_topic'] = sub_topic
+                q_data['quality_score'] = q_data.get('quality_score', 0.7)
+                
+                # Deduplicate
+                content_hash = MultiLanguageValidator.generate_content_hash(q_data)
+                if content_hash in seen_hashes:
+                    print(f"⚠️ Question {idx+1} is duplicate, skipping")
+                    continue
+                
+                q_data['content_hash'] = content_hash
+                seen_hashes.add(content_hash)
+                validated_questions.append(q_data)
+                
             except Exception as e:
-                print(f"❌ Question generation failed (attempt {attempts}): {e}")
-                # Continue trying until max_attempts
+                print(f"⚠️ Question {idx+1} processing error: {e}")
+                continue
         
-        if len(questions) < count:
-            print(f"⚠️ Only generated {len(questions)}/{count} unique questions")
+        print(f"✅ Generated {len(validated_questions)}/{count} valid unique questions")
+        return validated_questions
+    
+    def _build_batch_prompt(
+        self,
+        topic: str,
+        language_id: str,
+        mapping_id: str,
+        difficulty: float,
+        count: int,
+        sub_topic: Optional[str]
+    ) -> tuple[str, str]:
+        """
+        Construct optimized batch prompt for multiple questions in one call.
+        """
+        lang_map = {
+            "python_3": "Python 3",
+            "javascript_es6": "JavaScript (ES6)",
+            "java_17": "Java 17",
+            "cpp_20": "C++20",
+            "go_1_21": "Go 1.21"
+        }
+        lang_name = lang_map.get(language_id, language_id)
         
-        return questions
+        if difficulty < 0.3:
+            diff_desc = "beginner"
+        elif difficulty < 0.7:
+            diff_desc = "intermediate"
+        else:
+            diff_desc = "advanced"
+        
+        topic_focus = f"{topic} (focus: {sub_topic})" if sub_topic else topic
+        
+        system_prompt = f"""Expert CS educator creating {count} diverse MCQs for adaptive learning in {lang_name}.
+
+Respond with valid JSON:
+{{
+  "questions": [
+    {{
+      "question_text": "...",
+      "code_snippet": "...",
+      "options": [
+        {{"id": "A", "text": "...", "is_correct": true/false, "error_type": "..."}},
+        {{"id": "B", "text": "...", "is_correct": true/false, "error_type": "..."}},
+        {{"id": "C", "text": "...", "is_correct": true/false, "error_type": "..."}},
+        {{"id": "D", "text": "...", "is_correct": true/false, "error_type": "..."}}
+      ],
+      "explanation": "...",
+      "quality_score": 0.8
+    }}
+  ]
+}}
+
+Error types: SYNTAX_ERRORS, TYPE_ERRORS, LOGIC_ERRORS, LOOP_ERRORS, FUNCTION_ERRORS, COLLECTION_ERRORS, OOP_ERRORS, SCOPE_MISUNDERSTANDING, OFF_BY_ONE_ERROR, TYPE_MISMATCH, INDEX_OUT_OF_BOUNDS, NULL_POINTER_DEREFERENCE"""
+        
+        user_prompt = f"""Generate {count} distinct {diff_desc}-level MCQs about **{topic_focus}** in {lang_name}.
+
+Rules:
+- Each question tests ONE concept clearly
+- Vary question types: code output, behavior, theory, syntax
+- 4 options per question, exactly 1 correct
+- Wrong answers map to error_type
+- Include code_snippet for output/behavior questions
+- Brief explanation for correct answer
+- Avoid: "None/All of the above", trivial questions
+- quality_score: self-assess 0.0-1.0
+
+IMPORTANT: Make each question UNIQUE - no duplicates or near-duplicates."""
+        
+        return system_prompt, user_prompt
+    
+    def _parse_batch_response(self, raw_text: str, expected_count: int) -> Dict:
+        """
+        Parse and validate batch JSON response.
+        """
+        try:
+            data = json.loads(raw_text.strip())
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON response: {e}")
+        
+        if 'questions' not in data or not isinstance(data['questions'], list):
+            raise ValueError("Response missing 'questions' array")
+        
+        # Validate each question structure
+        for idx, q in enumerate(data['questions']):
+            if not all(k in q for k in ['question_text', 'options', 'explanation']):
+                raise ValueError(f"Question {idx+1} missing required fields")
+            
+            if len(q['options']) != 4:
+                raise ValueError(f"Question {idx+1} must have 4 options")
+            
+            correct_count = sum(1 for opt in q['options'] if opt.get('is_correct'))
+            if correct_count != 1:
+                raise ValueError(f"Question {idx+1} must have exactly 1 correct answer")
+        
+        if len(data['questions']) < expected_count * 0.7:  # Accept 70%+ yield
+            print(f"⚠️ Expected {expected_count} questions, got {len(data['questions'])}")
+        
+        return data

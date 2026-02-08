@@ -138,8 +138,9 @@ class GradingService:
             # 9. Save Detailed Questions Snapshot with error tracking
             self._save_exam_details(session_id, payload.results)
 
-            # 9.5. Record question history for seen tracking
-            self._record_question_history(payload.user_id, str(session_id), payload.results)
+            # 9.5. Record question history for seen tracking (skip for practice and review modes)
+            if payload.session_type not in ["practice", "review"]:
+                self._record_question_history(payload.user_id, str(session_id), payload.results)
             
             # 10. Generate Recommendations (includes difficulty tier suggestion)
             recommendations = self._generate_recommendations(

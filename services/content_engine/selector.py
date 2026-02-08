@@ -157,7 +157,7 @@ class QuestionSelector:
         random.shuffle(unique_questions)
         return unique_questions[:count]
 
-    def _select_unseen_questions(
+    def _select_unseen_verified(
         self,
         exclude_ids: List[str],
         language_id: str,
@@ -166,6 +166,7 @@ class QuestionSelector:
         tolerance: float,
         count: int
     ) -> List[QuestionBank]:
+        """Select unseen VERIFIED questions only."""
         if count <= 0:
             return []
         
@@ -186,7 +187,7 @@ class QuestionSelector:
             func.random()
         ).limit(count * 3).all()
         
-        # Deduplicate to prevent same question appearing twice
+        # Deduplicate
         seen_ids_set = set()
         unique_questions = []
         for q in questions:
@@ -196,6 +197,102 @@ class QuestionSelector:
         
         random.shuffle(unique_questions)
         return unique_questions[:count]
+    
+    def _select_unseen_unverified(
+        self,
+        exclude_ids: List[str],
+        language_id: str,
+        mapping_id: str,
+        target_diff: float,
+        tolerance: float,
+        count: int
+    ) -> List[QuestionBank]:
+        """Select unseen UNVERIFIED questions (fallback)."""
+        if count <= 0:
+            return []
+        
+        conditions = [
+            QuestionBank.language_id == language_id,
+            QuestionBank.mapping_id == mapping_id,
+            QuestionBank.difficulty.between(target_diff - tolerance, target_diff + tolerance),
+            QuestionBank.is_verified == False
+        ]
+        
+        if exclude_ids:
+            conditions.append(~QuestionBank.id.in_(exclude_ids))
+        
+        questions = self.db.query(QuestionBank).filter(
+            and_(*conditions)
+        ).order_by(
+            QuestionBank.quality_score.desc(),
+            func.random()
+        ).limit(count * 3).all()
+        
+        # Deduplicate
+        seen_ids_set = set()
+        unique_questions = []
+        for q in questions:
+            if q.id not in seen_ids_set:
+                seen_ids_set.add(q.id)
+                unique_questions.append(q)
+        
+        random.shuffle(unique_questions)
+        return unique_questions[:count]
+    
+    def _select_verified_any(
+        self,
+        exclude_ids: List[str],
+        language_id: str,
+        mapping_id: str,
+        target_diff: float,
+        tolerance: float,
+        count: int
+    ) -> List[QuestionBank]:
+        """Select any verified questions (allows repeats, final fallback)."""
+        if count <= 0:
+            return []
+        
+        conditions = [
+            QuestionBank.language_id == language_id,
+            QuestionBank.mapping_id == mapping_id,
+            QuestionBank.difficulty.between(target_diff - tolerance, target_diff + tolerance),
+            QuestionBank.is_verified == True
+        ]
+        
+        if exclude_ids:
+            conditions.append(~QuestionBank.id.in_(exclude_ids))
+        
+        questions = self.db.query(QuestionBank).filter(
+            and_(*conditions)
+        ).order_by(
+            QuestionBank.quality_score.desc(),
+            func.random()
+        ).limit(count * 3).all()
+        
+        # Deduplicate
+        seen_ids_set = set()
+        unique_questions = []
+        for q in questions:
+            if q.id not in seen_ids_set:
+                seen_ids_set.add(q.id)
+                unique_questions.append(q)
+        
+        random.shuffle(unique_questions)
+        return unique_questions[:count]
+    
+    def _select_unseen_questions(
+        self,
+        exclude_ids: List[str],
+        language_id: str,
+        mapping_id: str,
+        target_diff: float,
+        tolerance: float,
+        count: int
+    ) -> List[QuestionBank]:
+        """Legacy method - calls _select_unseen_verified for compatibility."""
+        return self._select_unseen_verified(
+            exclude_ids, language_id, mapping_id, target_diff, tolerance, count
+        )
 
     def _select_exam_unseen(
         self,
@@ -224,23 +321,29 @@ class QuestionSelector:
         target_diff: float,
         tolerance: float,
         count: int,
-        seen_ratio: float
+        seen_ratio: float = 0.4  # Default 40% seen
     ) -> List[QuestionBank]:
-        seen_target = max(0, int(round(count * seen_ratio)))
-        unseen_target = max(0, count - seen_target)
+        """
+        Practice mode: 40% seen + 60% unseen verified questions.
+        Fallback order: unverified unseen → all verified → all unverified
+        """
+        seen_target = max(0, int(round(count * seen_ratio)))  # 40% seen
+        unseen_target = max(0, count - seen_target)            # 60% unseen
         
         seen_exam_ids = self._get_seen_question_ids(user_id, language_id, mapping_id, exam_only=True)
         all_seen_ids = self._get_seen_question_ids(user_id, language_id, mapping_id, exam_only=False)
         
+        # Step 1: Get seen questions from previous exams
         seen_questions = self._select_questions_by_ids(
             seen_exam_ids, language_id, mapping_id, target_diff, tolerance, seen_target
         )
         
-        # If we don't have enough seen questions, shift the remainder to unseen
+        # If not enough seen, shift remainder to unseen
         missing_seen = max(0, seen_target - len(seen_questions))
         unseen_target += missing_seen
         
-        unseen_questions = self._select_unseen_questions(
+        # Step 2: Get unseen VERIFIED questions (priority)
+        unseen_verified = self._select_unseen_verified(
             exclude_ids=all_seen_ids,
             language_id=language_id,
             mapping_id=mapping_id,
@@ -249,21 +352,39 @@ class QuestionSelector:
             count=unseen_target
         )
         
-        combined = seen_questions + unseen_questions
+        combined = seen_questions + unseen_verified
         
-        # Final fallback: allow verified repeats if still short
+        # Step 3: Fallback to unseen UNVERIFIED if still not enough
         if len(combined) < count:
-            fallback = self._select_strategy_3(
-                user_id,
-                language_id,
-                mapping_id,
-                target_diff,
-                tolerance,
-                count - len(combined)
+            deficit = count - len(combined)
+            all_fetched_ids = [q.id for q in combined]
+            
+            unseen_unverified = self._select_unseen_unverified(
+                exclude_ids=all_seen_ids + all_fetched_ids,
+                language_id=language_id,
+                mapping_id=mapping_id,
+                target_diff=target_diff,
+                tolerance=tolerance,
+                count=deficit
+            )
+            combined.extend(unseen_unverified)
+        
+        # Step 4: Final fallback - allow verified repeats if still short
+        if len(combined) < count:
+            deficit = count - len(combined)
+            all_fetched_ids = [q.id for q in combined]
+            
+            fallback = self._select_verified_any(
+                exclude_ids=all_fetched_ids,
+                language_id=language_id,
+                mapping_id=mapping_id,
+                target_diff=target_diff,
+                tolerance=tolerance,
+                count=deficit
             )
             combined.extend(fallback)
         
-        # Deduplicate to prevent same question appearing twice
+        # Deduplicate to prevent duplicates
         seen_ids_set = set()
         unique_questions = []
         for q in combined:
@@ -284,37 +405,66 @@ class QuestionSelector:
         count: int,
         seen_ratio: float
     ) -> List[QuestionBank]:
-        seen_target = max(0, int(round(count * seen_ratio)))
+        """
+        Review mode: 20% seen + 80% unseen verified questions
+        Similar to practice mode but with 20/80 ratio instead of 40/60
+        Falls back to unverified if needed, then allows repeats
+        """
+        # Use 20% seen + 80% unseen for review mode
+        seen_target = max(0, int(round(count * 0.20)))
         unseen_target = max(0, count - seen_target)
         
+        combined = []
+        
+        # Step 1: Get seen questions from previous exams
         seen_ids = self._get_seen_question_ids(user_id, language_id, mapping_id, exam_only=False)
         
-        seen_questions = self._select_questions_by_ids(
-            seen_ids, language_id, mapping_id, target_diff, tolerance, seen_target
-        )
+        if seen_target > 0:
+            seen_questions = self._select_questions_by_ids(
+                seen_ids, language_id, mapping_id, target_diff, tolerance, seen_target
+            )
+            combined.extend(seen_questions)
+            
+            # If we didn't get enough seen questions, add to unseen target
+            if len(seen_questions) < seen_target:
+                missing_seen = seen_target - len(seen_questions)
+                unseen_target += missing_seen
         
-        missing_seen = max(0, seen_target - len(seen_questions))
-        unseen_target += missing_seen
+        # Step 2: Get unseen VERIFIED questions (priority)
+        if unseen_target > 0:
+            unseen_verified = self._select_unseen_verified(
+                exclude_ids=seen_ids,
+                language_id=language_id,
+                mapping_id=mapping_id,
+                target_diff=target_diff,
+                tolerance=tolerance,
+                count=unseen_target
+            )
+            combined.extend(unseen_verified)
+            
+            # Step 3: Fallback to unseen UNVERIFIED if still deficit
+            if len(unseen_verified) < unseen_target:
+                deficit = unseen_target - len(unseen_verified)
+                unseen_unverified = self._select_unseen_unverified(
+                    exclude_ids=seen_ids,
+                    language_id=language_id,
+                    mapping_id=mapping_id,
+                    target_diff=target_diff,
+                    tolerance=tolerance,
+                    count=deficit
+                )
+                combined.extend(unseen_unverified)
         
-        unseen_questions = self._select_unseen_questions(
-            exclude_ids=seen_ids,
-            language_id=language_id,
-            mapping_id=mapping_id,
-            target_diff=target_diff,
-            tolerance=tolerance,
-            count=unseen_target
-        )
-        
-        combined = seen_questions + unseen_questions
-        
+        # Step 4: Final fallback - allow verified repeats if still not enough
         if len(combined) < count:
-            fallback = self._select_strategy_3(
-                user_id,
-                language_id,
-                mapping_id,
-                target_diff,
-                tolerance,
-                count - len(combined)
+            deficit = count - len(combined)
+            fallback = self._select_verified_any(
+                exclude_ids=[],  # Allow any verified questions
+                language_id=language_id,
+                mapping_id=mapping_id,
+                target_diff=target_diff,
+                tolerance=tolerance,
+                count=deficit
             )
             combined.extend(fallback)
         

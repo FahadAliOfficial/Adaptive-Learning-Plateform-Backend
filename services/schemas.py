@@ -86,8 +86,9 @@ class ExamStartRequest(BaseModel):
 
     @validator('major_topic_id')
     def validate_topic_format(cls, v):
-        """Ensure format like PY_VAR_01, JS_FUNC_01, etc."""
-        if not (v.count('_') >= 2 and v[-2:].isdigit()):
+        """Ensure format like PY_VAR_01, JS_FUNC_01, PY_SYN_LOGIC, etc."""
+        # Just check it has at least one underscore (basic sanity check)
+        if '_' not in v or len(v) < 3:
             raise ValueError(f'Invalid major_topic_id format: {v}')
         return v
 
@@ -124,8 +125,9 @@ class ExamSubmissionPayload(BaseModel):
 
     @validator('major_topic_id')
     def validate_topic_format(cls, v):
-        """Ensure format like PY_VAR_01, JS_FUNC_01, etc."""
-        if not (v.count('_') >= 2 and v[-2:].isdigit()):
+        """Ensure format like PY_VAR_01, JS_FUNC_01, PY_SYN_LOGIC, etc."""
+        # Just check it has at least one underscore (basic sanity check)
+        if '_' not in v or len(v) < 3:
             raise ValueError(f'Invalid major_topic_id format: {v}')
         return v
 
