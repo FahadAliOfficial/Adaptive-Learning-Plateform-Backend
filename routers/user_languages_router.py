@@ -1,6 +1,7 @@
 """
 User Languages Router - Manages multi-language learning paths
 """
+import json
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import text, func
@@ -42,6 +43,7 @@ class LanguagePortfolioResponse(BaseModel):
 class AddLanguageRequest(BaseModel):
     """Request to add new language to learning"""
     language_id: str
+    difficulty_level: str = Field(default="beginner", pattern="^(beginner|intermediate|advanced)$")
 
 
 class AddLanguageResponse(BaseModel):
@@ -222,7 +224,8 @@ async def add_language_to_learning(
         )
     
     # Add language to array
-    new_languages = current_languages + [language_id]
+    new_languages = list(set(current_languages + [language_id]))
+    serialized = json.dumps(new_languages)
     
     # If this is the first language, set it as primary
     set_as_primary = primary_language is None
@@ -230,23 +233,46 @@ async def add_language_to_learning(
     if set_as_primary:
         db.execute(text("""
             UPDATE users
-            SET languages_learning = :languages,
+            SET languages_learning = CAST(:languages AS jsonb),
                 primary_language = :lang_id,
                 last_active_language = :lang_id
             WHERE id = :user_id
         """), {
-            "languages": new_languages,
+            "languages": serialized,
             "lang_id": language_id,
             "user_id": user_id
         })
     else:
         db.execute(text("""
             UPDATE users
-            SET languages_learning = :languages
+            SET languages_learning = CAST(:languages AS jsonb)
             WHERE id = :user_id
         """), {
-            "languages": new_languages,
+            "languages": serialized,
             "user_id": user_id
+        })
+    
+    # Seed initial student state based on difficulty level
+    difficulty_level = payload.difficulty_level or "beginner"
+    exp_config = config.get_experience_config(difficulty_level)
+    initial_mastery = exp_config.get('initial_mastery_estimate', 0.0)
+    assumed_mastered = exp_config.get('assumed_mastered', [])
+    
+    for mapping_id in assumed_mastered:
+        db.execute(text("""
+            INSERT INTO student_state 
+                (user_id, mapping_id, language_id, mastery_score, fluency_score, confidence_score, last_practiced_at, last_updated)
+            VALUES 
+                (:user_id, :mapping_id, :language_id, :mastery, :fluency, :confidence, NOW(), NOW())
+            ON CONFLICT (user_id, mapping_id, language_id) 
+            DO NOTHING
+        """), {
+            "user_id": user_id,
+            "mapping_id": mapping_id,
+            "language_id": language_id,
+            "mastery": initial_mastery,
+            "fluency": 1.2,
+            "confidence": 0.5
         })
     
     db.commit()

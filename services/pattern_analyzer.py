@@ -99,13 +99,14 @@ class PatternAnalyzer:
         # Calculate priority scores (frequency × severity)
         top_errors = []
         for error_type, stats in error_stats.items():
-            priority_score = stats["count"] * stats["severity"]
+            severity = stats["severity"] if stats["severity"] is not None else 0.5
+            priority_score = stats["count"] * severity
             metadata = self._get_error_metadata(error_type)
             
             top_errors.append({
                 "error_type": error_type,
                 "count": stats["count"],
-                "severity": stats["severity"],
+                "severity": severity,
                 "priority_score": round(priority_score, 2),
                 "category": stats["category"],
                 "remediation_boost": metadata.get("remediation_boost", 0.10),

@@ -69,7 +69,7 @@ async def register(
             secure=False,   # Set to True in production (HTTPS only)
             samesite="lax", # CSRF protection
             max_age=7*24*60*60,  # 7 days in seconds
-            path="/api/auth"  # Cookie only sent to auth endpoints
+            path="/"  # Cookie sent to all endpoints (needed for session persistence)
         )
         
         return result
@@ -130,7 +130,7 @@ async def login(
             secure=False,  # Set to True in production (HTTPS only)
             samesite="lax",
             max_age=7*24*60*60,  # 7 days
-            path="/api/auth"  # Cookie only sent to auth endpoints
+            path="/"  # Cookie sent to all endpoints (needed for session persistence)
         )
         
         # Don't return refresh_token in response body (security best practice)
@@ -175,7 +175,7 @@ async def login_form(
             secure=False,
             samesite="lax",
             max_age=7*24*60*60,
-            path="/api/auth"
+            path="/"  # Cookie sent to all endpoints
         )
         
         # Don't return refresh_token in response body
@@ -349,7 +349,7 @@ async def logout(
     # Clear the refresh_token httpOnly cookie
     response.delete_cookie(
         key="refresh_token",
-        path="/api/auth"
+        path="/"  # Must match the path used when setting the cookie
     )
     
     return {

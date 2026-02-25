@@ -553,8 +553,6 @@ async def poll_new_questions(
     delivered_ids = session_data["delivered_ids"]
     total_requested = session_data["total_requested"]
     
-    print(f"[Poll {session_id[:8]}] Polling: delivered={len(delivered_ids)}, total_requested={total_requested}")
-    
     # Fetch questions from database
     selector = QuestionSelector(db)
     all_questions = selector.select_questions(
@@ -568,12 +566,11 @@ async def poll_new_questions(
         seen_ratio=params["seen_ratio"]
     )
     
-    print(f"[Poll {session_id[:8]}] Selector returned {len(all_questions)} total questions")
-    
     # Filter to only new questions
     new_questions = [q for q in all_questions if q.id not in delivered_ids]
     
-    print(f"[Poll {session_id[:8]}] Found {len(new_questions)} NEW questions to return")
+    if new_questions:
+        print(f"[Poll {session_id[:8]}] ✅ Found {len(new_questions)} new questions (total in DB: {len(all_questions)})")
     
     # Update delivered set
     with sessions_lock:
@@ -581,7 +578,26 @@ async def poll_new_questions(
             for q in new_questions:
                 active_sessions[session_id]["delivered_ids"].add(q.id)
             current_total = len(active_sessions[session_id]["delivered_ids"])
-            more_loading = current_total < total_requested
+            
+            # Check if a generation task is still active for this topic
+            task_key = (params["language_id"], params["mapping_id"], params["target_difficulty"])
+            task_still_running = task_key in active_generation_tasks
+            
+            if current_total >= total_requested:
+                # All questions delivered – done
+                more_loading = False
+            elif task_still_running:
+                # Generation still in progress – keep polling
+                more_loading = True
+            else:
+                # Task finished (or never ran) and we don't have all questions –
+                # stop polling to avoid an infinite loop; the frontend will show
+                # whatever it received (possibly 0, which shows the error state).
+                more_loading = False
+                if current_total == 0:
+                    print(f"[Poll {session_id[:8]}] ⚠️ Generation task finished but 0 questions found for {params['mapping_id']}/{params['language_id']}")
+                else:
+                    print(f"[Poll {session_id[:8]}] ℹ️ Generation complete: {current_total}/{total_requested} questions available")
         else:
             more_loading = False
     

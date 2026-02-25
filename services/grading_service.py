@@ -918,8 +918,14 @@ class GradingService:
             return 0.5
         
         # 2. Calculate average accuracy from recent sessions
-        avg_accuracy = sum(s[0] for s in sessions) / len(sessions)
+        # Guard against NULL overall_score values in completed sessions
+        valid_scores = [s[0] for s in sessions if s[0] is not None]
+        if not valid_scores:
+            return 0.5
+        avg_accuracy = sum(valid_scores) / len(valid_scores)
         current_difficulty = sessions[0][1]  # Most recent difficulty
+        if current_difficulty is None:
+            return 0.5  # Fallback if difficulty_assigned is NULL
         
         # 3. Apply adjustment rules based on accuracy ranges
         difficulty_multiplier = 1.0  # Default: maintain
@@ -1007,12 +1013,15 @@ class GradingService:
         
         # Calculate user's current velocity (mastery improvement per hour)
         # Use overall_score from exam_sessions as a proxy for mastery at that time
+        # Only use COMPLETED sessions with non-null scores to avoid NoneType comparison errors
         velocity_query = text("""
             SELECT created_at, overall_score, time_taken_seconds
             FROM exam_sessions 
             WHERE user_id = :u 
               AND language_id = :l
               AND major_topic_id = :m
+              AND session_status = 'completed'
+              AND overall_score IS NOT NULL
             ORDER BY created_at ASC
             LIMIT 10
         """)
@@ -1027,31 +1036,37 @@ class GradingService:
             # Calculate velocity from actual data
             # Use time range between first and last session, not sum of durations
             timestamps = [s[0] for s in sessions]
-            mastery_values = [s[1] for s in sessions]
+            mastery_values = [s[1] for s in sessions if s[1] is not None]
             
-            # Parse timestamps if they're strings (SQLite compatibility)
-            parsed_timestamps = []
-            for ts in timestamps:
-                if isinstance(ts, str):
-                    ts = datetime.fromisoformat(ts.replace('Z', '+00:00'))
-                if ts.tzinfo is None:
-                    ts = ts.replace(tzinfo=timezone.utc)
-                parsed_timestamps.append(ts)
-            
-            # Calculate time elapsed between first and last session
-            time_delta = (parsed_timestamps[-1] - parsed_timestamps[0]).total_seconds() / 3600.0  # hours
-            mastery_delta = max(mastery_values) - min(mastery_values)
-            
-            if time_delta > 0 and mastery_delta > 0:
-                user_velocity = mastery_delta / time_delta  # mastery points per hour
+            if len(mastery_values) >= 2:
+                # Parse timestamps if they're strings (SQLite compatibility)
+                parsed_timestamps = []
+                for ts in timestamps:
+                    if isinstance(ts, str):
+                        ts = datetime.fromisoformat(ts.replace('Z', '+00:00'))
+                    if ts.tzinfo is None:
+                        ts = ts.replace(tzinfo=timezone.utc)
+                    parsed_timestamps.append(ts)
+                
+                # Calculate time elapsed between first and last session
+                time_delta = (parsed_timestamps[-1] - parsed_timestamps[0]).total_seconds() / 3600.0  # hours
+                mastery_delta = max(mastery_values) - min(mastery_values)
+                
+                if time_delta > 0 and mastery_delta > 0:
+                    user_velocity = mastery_delta / time_delta  # mastery points per hour
+                else:
+                    # Use baseline from config
+                    avg_hours = pattern.get('estimated_hours', 5.0) if pattern else 5.0
+                    user_velocity = 1.0 / avg_hours
+                
+                # Confidence increases with more data
+                session_count = len(sessions)
+                confidence = min(session_count / 10.0, 0.95)  # Max 95% confidence after 10+ sessions
             else:
-                # Use baseline from config
+                # Not enough valid (non-null) scores — fall back to baseline
                 avg_hours = pattern.get('estimated_hours', 5.0) if pattern else 5.0
-                user_velocity = 1.0 / avg_hours
-            
-            # Confidence increases with more data
-            session_count = len(sessions)
-            confidence = min(session_count / 10.0, 0.95)  # Max 95% confidence after 10+ sessions
+                user_velocity = None
+                confidence = 0.0
         else:
             # No history - use average from config
             avg_hours = pattern.get('estimated_hours', 5.0) if pattern else 5.0

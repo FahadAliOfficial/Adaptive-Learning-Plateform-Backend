@@ -384,7 +384,7 @@ class StateVectorGenerator:
         
         # Find strongest and weakest topics
         topic_strengths = [
-            (self.mappings_order[i], mastery_map.get(self.mappings_order[i], 0.0))
+            (self.mappings_order[i], mastery_map.get(self.mappings_order[i]) or 0.0)
             for i in range(len(self.mappings_order))
         ]
         topic_strengths.sort(key=lambda x: x[1], reverse=True)
