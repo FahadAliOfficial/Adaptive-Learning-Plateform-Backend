@@ -8,9 +8,16 @@ import uuid
 from datetime import datetime, timezone
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
-from .schemas import ExamSubmissionPayload, QuestionResult, MasteryUpdateResponse
+from .schemas import (
+    ExamSubmissionPayload, 
+    QuestionResult, 
+    MasteryUpdateResponse,
+    EnhancedMasteryUpdateResponse,
+    EnhancedErrorPattern,
+    PrerequisiteGap
+)
 from .config import get_config
 from .error_detection_service import error_detection_service
 from .review_scheduler import ReviewScheduler
@@ -66,8 +73,8 @@ class GradingService:
             accuracy = len(corrects) / len(payload.results)
             avg_difficulty = sum(q.difficulty for q in payload.results) / len(payload.results)
             
-            # 1.5. Auto-detect error types from MCQ choices
-            enhanced_results = self._enhance_results_with_error_detection(payload.results)
+            # 1.5. Auto-detect error types from MCQ choices (Phase 2 enhanced with language filtering)
+            enhanced_results = self._enhance_results_with_error_detection(payload.results, payload.language_id)
             
             # 2. Calculate Fluency (Time Efficiency)
             total_time = sum(q.time_spent for q in payload.results)
@@ -203,15 +210,130 @@ class GradingService:
                     db_connection_string=str(self.db.bind.url)
                 )
             
-            return MasteryUpdateResponse(
+            # Phase 2 Fix (Issue 2 & 3): Get error history context and prerequisite gaps
+            # Build EnhancedErrorPattern list from current session + historical trends
+            error_patterns_enhanced = []
+            session_error_types = [r.error_type for r in enhanced_results if r.error_type and not r.is_correct]
+            
+            if session_error_types:
+                # Get historical trends for session errors
+                error_history_context = self._get_error_history_context(
+                    user_id=payload.user_id,
+                    language_id=payload.language_id,
+                    session_error_types=list(set(session_error_types))  # Unique errors only
+                )
+                
+                # Count errors in current session
+                from collections import Counter
+                session_error_counts = Counter(session_error_types)
+                
+                # Build EnhancedErrorPattern for each error type
+                for error_type in set(session_error_types):
+                    history = error_history_context.get(error_type, {})
+                    pattern = EnhancedErrorPattern(
+                        error_type=error_type,
+                        count=session_error_counts[error_type],
+                        total_count=history.get('total_count'),
+                        trend=history.get('trend'),
+                        severity=history.get('severity'),
+                        category=self._get_error_category(error_type),
+                        first_seen=history.get('first_seen'),
+                        last_seen=history.get('last_seen'),
+                        applies_to_languages=self._get_error_languages(error_type)
+                    )
+                    error_patterns_enhanced.append(pattern)
+            
+            # Get prerequisite gaps and readiness from PrerequisiteAnalyzer
+            prerequisite_gaps_list = []
+            overall_readiness_score = None
+            
+            try:
+                from services.prerequisite_analyzer import PrerequisiteAnalyzer
+                prereq_analyzer = PrerequisiteAnalyzer(self.db)
+                
+                # Analyze prerequisites for the current topic
+                prereq_analysis = prereq_analyzer.analyze_prerequisites(
+                    user_id=payload.user_id,
+                    language_id=payload.language_id,
+                    target_mapping_id=mapping_id
+                )
+                
+                if prereq_analysis:
+                    overall_readiness_score = prereq_analysis.get('overall_readiness', 0.0)
+                    
+                    # Get gaps (both critical and regular gaps)
+                    all_gaps = prereq_analysis.get('critical_gaps', []) + prereq_analysis.get('gaps', [])
+                    
+                    for gap in all_gaps:
+                        prerequisite_gaps_list.append(PrerequisiteGap(
+                            prereq_id=gap['prereq_id'],
+                            name=gap['name'],
+                            current_mastery=gap['current_mastery'],
+                            required_mastery=gap['required_mastery'],
+                            gap_size=gap['gap_size'],
+                            weight=gap['weight'],
+                            impact=gap['impact'],
+                            recommendation=gap['recommendation']
+                        ))
+            except Exception as e:
+                # If prerequisite analysis fails, continue without it (backward compatible)
+                print(f"Prerequisite analysis failed: {e}")
+            
+            # Phase 3 Fix (Issue 2): Store prerequisite_gaps and overall_readiness in exam_details
+            # Update exam_details with Phase 2 data immediately after commit
+            try:
+                phase2_data = {}
+                if prerequisite_gaps_list:
+                    phase2_data['prerequisite_gaps'] = [
+                        {
+                            'prereq_id': gap.prereq_id,
+                            'name': gap.name,
+                            'current_mastery': gap.current_mastery,
+                            'required_mastery': gap.required_mastery,
+                            'gap_size': gap.gap_size,
+                            'weight': gap.weight,
+                            'impact': gap.impact,
+                            'recommendation': gap.recommendation
+                        }
+                        for gap in prerequisite_gaps_list
+                    ]
+                if overall_readiness_score is not None:
+                    phase2_data['overall_readiness'] = overall_readiness_score
+                
+                if phase2_data:
+                    import json
+                    update_query = text("""
+                        UPDATE exam_details
+                        SET recommendations = jsonb_set(
+                            COALESCE(recommendations, '{}'::jsonb),
+                            '{phase2_data}',
+                            CAST(:phase2_json AS jsonb)
+                        )
+                        WHERE session_id = :sid
+                    """)
+                    self.db.execute(update_query, {
+                        'sid': str(session_id),
+                        'phase2_json': json.dumps(phase2_data)
+                    })
+                    self.db.commit()
+            except Exception as e:
+                print(f"Failed to store Phase 2 data: {e}")
+                # Don't fail the entire request if Phase 2 storage fails
+            
+            # Return EnhancedMasteryUpdateResponse with Phase 2 fields
+            return EnhancedMasteryUpdateResponse(
                 success=True,
                 session_id=str(session_id),
                 accuracy=round(accuracy, 3),
                 fluency_ratio=round(fluency_ratio, 2),
                 new_mastery_score=round(new_mastery, 3),
-                synergies_applied=synergies_applied + transfer_bonuses + interdependency_boosts,  # All bonuses combined
+                synergies_applied=synergies_applied + transfer_bonuses + interdependency_boosts,
                 soft_gate_violations=gate_violations,
-                recommendations=recommendations
+                recommendations=recommendations,
+                # Phase 2 enhancements
+                error_patterns=error_patterns_enhanced if error_patterns_enhanced else None,
+                prerequisite_gaps=prerequisite_gaps_list if prerequisite_gaps_list else None,
+                overall_readiness=round(overall_readiness_score, 3) if overall_readiness_score is not None else None
             )
         
         except Exception as e:
@@ -822,9 +944,20 @@ class GradingService:
         
         return suggestions[:2]  # Top 2 suggestions
 
-    def _enhance_results_with_error_detection(self, results: List[QuestionResult]) -> List[QuestionResult]:
+    def _enhance_results_with_error_detection(self, results: List[QuestionResult], language_id: str = None) -> List[QuestionResult]:
         """
-        Enhance question results with automatic error type detection from MCQ choices.
+        Phase 2 Enhancement: Enhance question results with automatic error type detection from MCQ choices.
+        
+        Features:
+        - Detects error types from MCQ option metadata
+        - Filters errors by language applicability (Phase 2.5)
+        - Enriches with error category and severity
+        
+        Args:
+            results: List of question results
+            language_id: Optional language identifier for filtering errors
+        
+        Returns: Enhanced results with error_type, category, severity
         """
         enhanced = []
         
@@ -852,6 +985,12 @@ class GradingService:
                     )
                     
                     if detected_error:
+                        # Phase 2.5: Apply language filtering
+                        if language_id and not self._is_error_applicable_to_language(detected_error, language_id):
+                            # Error not applicable to this language, skip it
+                            enhanced.append(result)
+                            continue
+                        
                         # Create new result with detected error type
                         enhanced_result = result.model_copy(update={'error_type': detected_error})
                         enhanced.append(enhanced_result)
@@ -866,6 +1005,41 @@ class GradingService:
                 enhanced.append(result)
         
         return enhanced
+    
+    def _is_error_applicable_to_language(self, error_type: str, language_id: str) -> bool:
+        """
+        Phase 2.5: Check if an error type applies to a specific language.
+        
+        Example:
+        - MEMORY_LEAK: Only applicable to cpp_20, not python_3
+        - INDENTATION_ERROR: Only applicable to python_3, not javascript_es6
+        - OFF_BY_ONE_ERROR: Universal (applies to all languages)
+        
+        Args:
+            error_type: Error type identifier
+            language_id: Language identifier
+        
+        Returns: True if error applies to language, False otherwise
+        """
+        # Get error taxonomy
+        taxonomy = self.config.transition_map.get('error_pattern_taxonomy', [])
+        
+        # Find error definition
+        for category in taxonomy:
+            for pattern in category.get('common_patterns', []):
+                if pattern.get('error_type') == error_type:
+                    # Check applies_to_languages field
+                    applies_to = pattern.get('applies_to_languages', [])
+                    
+                    # If empty or "all", applies to all languages
+                    if not applies_to or applies_to == ["all"] or "all" in applies_to:
+                        return True
+                    
+                    # Check if language is in the list
+                    return language_id in applies_to
+        
+        # If error not found in taxonomy, assume it applies (backward compatibility)
+        return True
     
     def _calculate_adaptive_difficulty(
         self, 
@@ -1096,6 +1270,128 @@ class GradingService:
             'pattern_avg_hours': pattern.get('estimated_hours', 5.0) if pattern else 5.0,
             'session_count': len(sessions)
         }
+    
+    def _get_error_history_context(
+        self,
+        user_id: str,
+        language_id: str,
+        session_error_types: List[str]
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Get enriched error history context for current session errors.
+        
+        Phase 2 Enhancement: Returns detailed trend analysis for each error type.
+        
+        Args:
+            user_id: Student UUID
+            language_id: Language identifier
+            session_error_types: List of error types from current session
+        
+        Returns:
+            {
+                "OFF_BY_ONE_ERROR": {
+                    "total_count": 7,
+                    "trend": "persistent",  # persistent/improving/new
+                    "first_seen": "2026-01-15",
+                    "last_seen": "2026-02-26",
+                    "corrected_count": 2,
+                    "severity": 0.5
+                },
+                ...
+            }
+        """
+        if not session_error_types:
+            return {}
+        
+        # Query error history for these specific error types
+        query = text("""
+            SELECT 
+                error_type,
+                COUNT(*) as total_count,
+                MIN(occurred_at) as first_seen,
+                MAX(occurred_at) as last_seen,
+                SUM(CASE WHEN is_corrected THEN 1 ELSE 0 END) as corrected_count,
+                AVG(severity) as avg_severity
+            FROM error_history
+            WHERE user_id = :uid 
+              AND language_id = :lang
+              AND error_type = ANY(:error_types)
+            GROUP BY error_type
+        """)
+        
+        rows = self.db.execute(query, {
+            "uid": user_id,
+            "lang": language_id,
+            "error_types": list(set(session_error_types))  # Unique error types
+        }).fetchall()
+        
+        error_context = {}
+        for row in rows:
+            error_type = row[0]
+            total_count = row[1]
+            first_seen = row[2]
+            last_seen = row[3]
+            corrected_count = row[4]
+            avg_severity = row[5] or 0.5
+            
+            # Determine trend
+            if total_count >= 4:
+                trend = "persistent"
+            elif corrected_count > 0:
+                trend = "improving"
+            else:
+                trend = "new" if total_count <= 2 else "recurring"
+            
+            error_context[error_type] = {
+                "total_count": total_count,
+                "trend": trend,
+                "first_seen": first_seen.strftime("%Y-%m-%d") if first_seen else None,
+                "last_seen": last_seen.strftime("%Y-%m-%d") if last_seen else None,
+                "corrected_count": corrected_count,
+                "severity": round(avg_severity, 2)
+            }
+        
+        return error_context
+    
+    def _get_error_category(self, error_type: str) -> Optional[str]:
+        """
+        Get the category for an error type from taxonomy.
+        
+        Args:
+            error_type: Error type identifier
+        
+        Returns: Category name (SYNTAX_ERRORS, LOGIC_ERRORS, etc.) or None
+        """
+        taxonomy = self.config.transition_map.get('error_pattern_taxonomy', [])
+        
+        for category in taxonomy:
+            for pattern in category.get('common_patterns', []):
+                if pattern.get('error_type') == error_type:
+                    return category.get('error_category')
+        
+        return None
+    
+    def _get_error_languages(self, error_type: str) -> Optional[List[str]]:
+        """
+        Get the list of applicable languages for an error type.
+        
+        Args:
+            error_type: Error type identifier
+        
+        Returns: List of language_ids or None if universal
+        """
+        taxonomy = self.config.transition_map.get('error_pattern_taxonomy', [])
+        
+        for category in taxonomy:
+            for pattern in category.get('common_patterns', []):
+                if pattern.get('error_type') == error_type:
+                    applies_to = pattern.get('applies_to_languages', [])
+                    # Return None for universal errors (empty or "all")
+                    if not applies_to or applies_to == ["all"] or "all" in applies_to:
+                        return None
+                    return applies_to
+        
+        return None  # Default: universal
     
     def _mark_recommendation_followed(
         self,

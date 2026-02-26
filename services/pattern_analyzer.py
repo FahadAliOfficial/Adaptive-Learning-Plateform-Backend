@@ -185,11 +185,11 @@ class PatternAnalyzer:
         
         query = text("""
             UPDATE error_history
-            SET is_corrected = 1, corrected_at = CURRENT_TIMESTAMP
+                        SET is_corrected = TRUE, corrected_at = CURRENT_TIMESTAMP
             WHERE user_id = :user_id 
               AND language_id = :lang_id
               AND error_type = :error_type
-              AND is_corrected = 0
+                            AND is_corrected = FALSE
         """)
         
         result = self.db.execute(query, {

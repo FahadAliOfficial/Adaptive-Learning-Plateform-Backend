@@ -252,8 +252,21 @@ async def add_language_to_learning(
             "user_id": user_id
         })
     
-    # Seed initial student state based on difficulty level
+    # Store language-specific experience level
     difficulty_level = payload.difficulty_level or "beginner"
+    insert_lang_pref = text("""
+        INSERT INTO user_language_preferences (user_id, language_id, experience_level)
+        VALUES (:user_id, :language_id, :experience_level)
+        ON CONFLICT (user_id, language_id) 
+        DO UPDATE SET experience_level = :experience_level, updated_at = NOW()
+    """)
+    db.execute(insert_lang_pref, {
+        "user_id": user_id,
+        "language_id": language_id,
+        "experience_level": difficulty_level
+    })
+    
+    # Seed initial student state based on difficulty level
     exp_config = config.get_experience_config(difficulty_level)
     initial_mastery = exp_config.get('initial_mastery_estimate', 0.0)
     assumed_mastered = exp_config.get('assumed_mastered', [])

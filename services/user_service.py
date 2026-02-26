@@ -55,16 +55,31 @@ class UserService:
         hashed_password = hash_password(payload.password)
         
         insert_user = text("""
-            INSERT INTO users (id, email, password_hash, last_active_language, created_at)
-            VALUES (:id, :email, :password, :language, NOW())
+            INSERT INTO users (id, email, password_hash, last_active_language, experience_level, created_at)
+            VALUES (:id, :email, :password, :language, :experience_level, NOW())
         """)
         
         self.db.execute(insert_user, {
             "id": user_id,
             "email": payload.email,
             "password": hashed_password,
-            "language": payload.language_id  # Can be None for new users
+            "language": payload.language_id,  # Can be None for new users
+            "experience_level": payload.experience_level or 'intermediate'  # Default to intermediate if not provided
         })
+        
+        # Store language-specific experience level if language is provided
+        if payload.language_id:
+            insert_lang_pref = text("""
+                INSERT INTO user_language_preferences (user_id, language_id, experience_level)
+                VALUES (:user_id, :language_id, :experience_level)
+                ON CONFLICT (user_id, language_id) 
+                DO UPDATE SET experience_level = :experience_level, updated_at = NOW()
+            """)
+            self.db.execute(insert_lang_pref, {
+                "user_id": user_id,
+                "language_id": payload.language_id,
+                "experience_level": payload.experience_level or 'intermediate'
+            })
         
         # 3. Initialize learning state only if language and experience are provided
         # Otherwise, user will complete onboarding later

@@ -144,6 +144,63 @@ class MasteryUpdateResponse(BaseModel):
     recommendations: List[str]  # Next topics to study
 
 
+class EnhancedErrorPattern(BaseModel):
+    """
+    Phase 2 Enhancement: Rich error pattern with trend analysis.
+    
+    Used in exam results API responses to provide detailed error insights.
+    """
+    error_type: str = Field(..., description="Error type identifier (OFF_BY_ONE_ERROR, TYPE_MISMATCH, etc.)")
+    count: int = Field(..., description="Number of occurrences in current session")
+    total_count: Optional[int] = Field(None, description="Total occurrences across all sessions")
+    trend: Optional[Literal["new", "improving", "persistent", "recurring"]] = Field(
+        None,
+        description="Error trend: new (first/second time), improving (being corrected), persistent (4+), recurring (3)"
+    )
+    severity: Optional[float] = Field(None, ge=0.0, le=1.0, description="Error severity (0.0-1.0)")
+    category: Optional[str] = Field(None, description="Error category (SYNTAX_ERRORS, LOGIC_ERRORS, etc.)")
+    first_seen: Optional[str] = Field(None, description="ISO date when error first occurred")
+    last_seen: Optional[str] = Field(None, description="ISO date when error last occurred")
+    applies_to_languages: Optional[List[str]] = Field(None, description="Languages this error applies to (empty = all)")
+
+
+class PrerequisiteGap(BaseModel):
+    """
+    Phase 2 Enhancement: Prerequisite gap information.
+    
+    Used to identify and prioritize prerequisite weaknesses.
+    """
+    prereq_id: str = Field(..., description="Prerequisite mapping ID (UNIV_VAR, UNIV_COND, etc.)")
+    name: str = Field(..., description="Human-readable prerequisite name")
+    current_mastery: float = Field(..., ge=0.0, le=1.0, description="Current mastery score")
+    required_mastery: float = Field(..., ge=0.0, le=1.0, description="Required mastery threshold")
+    gap_size: float = Field(..., ge=0.0, description="Gap between current and required mastery")
+    weight: float = Field(..., ge=0.0, le=1.0, description="Importance weight of this prerequisite")
+    impact: Literal["high", "medium", "low"] = Field(..., description="Impact of this gap on learning")
+    recommendation: str = Field(..., description="Actionable recommendation to close the gap")
+
+
+class EnhancedMasteryUpdateResponse(BaseModel):
+    """
+    Phase 2 Enhancement: Extended mastery response with error trends and prerequisites.
+    
+    Backward compatible - can be used in place of MasteryUpdateResponse.
+    """
+    success: bool
+    session_id: str
+    accuracy: float
+    fluency_ratio: float
+    new_mastery_score: float
+    synergies_applied: List[str]
+    soft_gate_violations: List[str]
+    recommendations: List[str]
+    
+    # Phase 2 enhancements (optional for backward compatibility)
+    error_patterns: Optional[List[EnhancedErrorPattern]] = Field(None, description="Enhanced error patterns with trends")
+    prerequisite_gaps: Optional[List[PrerequisiteGap]] = Field(None, description="Identified prerequisite gaps")
+    overall_readiness: Optional[float] = Field(None, description="Readiness score for current topic (0.0-1.0)")
+
+
 class StateVectorRequest(BaseModel):
     """Request for RL state vector generation."""
     user_id: str

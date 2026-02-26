@@ -394,6 +394,7 @@ async def update_profile(
         UPDATE users 
         SET last_active_language = :language_id,
             primary_language = COALESCE(primary_language, :language_id),
+            experience_level = COALESCE(:experience_level, experience_level),
             languages_learning = CASE 
                 WHEN languages_learning IS NULL OR languages_learning = '[]'::jsonb
                 THEN jsonb_build_array(:language_id)
@@ -406,8 +407,23 @@ async def update_profile(
     
     db.execute(update_query, {
         "language_id": language_id,
+        "experience_level": experience_level,
         "user_id": current_user["id"]
     })
+    
+    # Store language-specific experience level
+    if experience_level:
+        insert_lang_pref = text("""
+            INSERT INTO user_language_preferences (user_id, language_id, experience_level)
+            VALUES (:user_id, :language_id, :experience_level)
+            ON CONFLICT (user_id, language_id) 
+            DO UPDATE SET experience_level = :experience_level, updated_at = NOW()
+        """)
+        db.execute(insert_lang_pref, {
+            "user_id": current_user["id"],
+            "language_id": language_id,
+            "experience_level": experience_level
+        })
     
     # Initialize student state if experience level is provided
     if experience_level:

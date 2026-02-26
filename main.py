@@ -511,10 +511,28 @@ async def get_exam_results(
         if error_type:
             error_counts[error_type] = error_counts.get(error_type, 0) + 1
 
-    error_patterns = [
-        {"error_type": k, "count": v}
-        for k, v in error_counts.items()
-    ]
+    error_explanations = {}
+    if isinstance(recommendations_raw, str):
+        try:
+            parsed_recommendations = json.loads(recommendations_raw)
+            if isinstance(parsed_recommendations, dict):
+                error_explanations = parsed_recommendations.get("error_explanations", {}) or {}
+        except Exception:
+            error_explanations = {}
+    elif isinstance(recommendations_raw, dict):
+        error_explanations = recommendations_raw.get("error_explanations", {}) or {}
+
+    error_patterns = []
+    for error_type, count in error_counts.items():
+        explanation = error_explanations.get(error_type, {}) if isinstance(error_explanations, dict) else {}
+        error_patterns.append({
+            "error_type": error_type,
+            "count": count,
+            "why_wrong": explanation.get("why_wrong"),
+            "correct_approach": explanation.get("correct_approach"),
+            "language_tip": explanation.get("language_tip"),
+            "practice_suggestion": explanation.get("practice_suggestion")
+        })
 
     # Recommendations payload
     if isinstance(recommendations_raw, str):
@@ -523,6 +541,21 @@ async def get_exam_results(
         recommendations = recommendations_raw or {}
 
     resources = recommendations.get("resources", []) if isinstance(recommendations, dict) else []
+    meta = recommendations.get("meta", {}) if isinstance(recommendations, dict) else {}
+    recommendations_source = meta.get("recommendations_source", "unknown")
+    error_patterns_source = meta.get("error_patterns_source", "unknown")
+
+    if analysis_status == "failed":
+        recommendations_source = "failed"
+        error_patterns_source = "failed"
+    elif analysis_status in ["pending", "generating"] and recommendations_source == "unknown":
+        recommendations_source = "pending"
+        error_patterns_source = "pending"
+    
+    # Phase 3 Fix (Issue 2): Extract prerequisite_gaps and overall_readiness from recommendations
+    phase2_data = recommendations.get("phase2_data", {}) if isinstance(recommendations, dict) else {}
+    prerequisite_gaps = phase2_data.get("prerequisite_gaps", None)
+    overall_readiness = phase2_data.get("overall_readiness", None)
 
     return {
         "session_id": session_id,
@@ -537,7 +570,12 @@ async def get_exam_results(
         "error_patterns": error_patterns,
         "recommendations": resources,
         "analysis_status": analysis_status,
-        "analysis_bullets": analysis_bullets
+        "analysis_bullets": analysis_bullets,
+        "recommendations_source": recommendations_source,
+        "error_patterns_source": error_patterns_source,
+        # Phase 2 enhancements (optional)
+        "prerequisite_gaps": prerequisite_gaps,
+        "overall_readiness": overall_readiness
     }
 
 
