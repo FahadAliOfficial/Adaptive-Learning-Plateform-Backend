@@ -378,6 +378,11 @@ async def update_profile(
     language_id = payload.get("language_id")
     experience_level = payload.get("experience_level")
     
+    print(f"\n[DEBUG] update_profile called:")
+    print(f"[DEBUG]   user_id: {current_user['id']}")
+    print(f"[DEBUG]   language_id: {language_id}")
+    print(f"[DEBUG]   experience_level: {experience_level}")
+    
     if not language_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -411,6 +416,11 @@ async def update_profile(
         exp_config = config.get_experience_config(experience_level)
         initial_mastery = exp_config.get('initial_mastery_estimate', 0.0)
         assumed_mastered = exp_config.get('assumed_mastered', [])
+        
+        print(f"[DEBUG] Experience config:")
+        print(f"[DEBUG]   initial_mastery: {initial_mastery}")
+        print(f"[DEBUG]   assumed_mastered: {assumed_mastered}")
+        print(f"[DEBUG]   count: {len(assumed_mastered)}")
         
         # Pre-populate assumed knowledge for intermediate/advanced users
         for mapping_id in assumed_mastered:

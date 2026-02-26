@@ -6,6 +6,7 @@ Primes new users' knowledge state based on their self-reported experience level.
 import uuid
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from sqlalchemy.exc import ProgrammingError
 from typing import Dict, Any, Optional
 from datetime import datetime
 
@@ -647,34 +648,46 @@ class UserService:
                 delete_state = text("DELETE FROM student_state WHERE user_id = :user_id")
                 result = self.db.execute(delete_state, {"user_id": user_id})
                 print(f"Deleted {result.rowcount} student_state records")
+            except ProgrammingError:
+                # Table doesn't exist - skip silently
+                self.db.rollback()
             except Exception as e:
-                print(f"Note: student_state deletion issue (table may not exist): {e}")
-                # Rollback and start fresh transaction
+                print(f"Warning: Could not delete student_state: {str(e)}")
                 self.db.rollback()
             
-            # 2. Delete practice sessions (if table exists)
+            # 2. Delete exam sessions
             try:
-                delete_sessions = text("DELETE FROM practice_sessions WHERE user_id = :user_id")
+                delete_sessions = text("DELETE FROM exam_sessions WHERE user_id = :user_id")
                 result = self.db.execute(delete_sessions, {"user_id": user_id})
-                print(f"Deleted {result.rowcount} practice session records")
+                print(f"Deleted {result.rowcount} exam session records")
+            except ProgrammingError:
+                # Table doesn't exist - skip silently
+                self.db.rollback()
             except Exception as e:
-                print(f"Note: practice_sessions deletion issue (table may not exist): {e}")
-                # Rollback and start fresh transaction
+                print(f"Warning: Could not delete exam_sessions: {str(e)}")
                 self.db.rollback()
             
-            # 3. Delete any RL model data (if exists)
+            # 3. Delete practice sessions (legacy table - may not exist)
             try:
-                delete_rl_data = text("""
-                    DELETE FROM rl_model_states WHERE user_id = :user_id;
-                    DELETE FROM rl_training_data WHERE user_id = :user_id;
-                """)
-                self.db.execute(delete_rl_data, {"user_id": user_id})
-            except Exception as e:
-                print(f"Note: RL data deletion issue (tables may not exist): {e}")
-                # Rollback and start fresh transaction
+                delete_practice = text("DELETE FROM practice_sessions WHERE user_id = :user_id")
+                result = self.db.execute(delete_practice, {"user_id": user_id})
+                if result.rowcount > 0:
+                    print(f"Deleted {result.rowcount} practice session records")
+            except ProgrammingError:
+                # Table doesn't exist - skip silently (this is expected)
                 self.db.rollback()
             
-            # 4. Finally, delete user record (this should always work)
+            # 4. Delete RL model data (legacy tables - may not exist)
+            try:
+                delete_rl = text("DELETE FROM rl_model_states WHERE user_id = :user_id")
+                self.db.execute(delete_rl, {"user_id": user_id})
+                delete_rl_training = text("DELETE FROM rl_training_data WHERE user_id = :user_id")
+                self.db.execute(delete_rl_training, {"user_id": user_id})
+            except ProgrammingError:
+                # Tables don't exist - skip silently (this is expected)
+                self.db.rollback()
+            
+            # 5. Finally, delete user record (this should always work)
             try:
                 delete_user = text("DELETE FROM users WHERE id = :user_id")
                 result = self.db.execute(delete_user, {"user_id": user_id})
