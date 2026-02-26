@@ -5,7 +5,7 @@ Provides endpoints for admin users to manage platform users, questions, and view
 """
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import text, func
+from sqlalchemy import text, func, String, cast, or_
 from typing import Optional, List
 import hashlib
 
@@ -171,21 +171,24 @@ async def get_all_questions(
             query = query.filter(QuestionBank.times_used >= min_usage)
         
         if search:
-            # Search in question_data JSONB field
+            # Search in question_data JSONB field AND by question ID
             search_pattern = f"%{search}%"
             query = query.filter(
-                func.cast(QuestionBank.question_data, db.Text).ilike(search_pattern)
+                or_(
+                    # Search in question ID
+                    QuestionBank.id.ilike(search_pattern),
+                    # Search in question text within JSONB
+                    cast(QuestionBank.question_data, String).ilike(search_pattern)
+                )
             )
         
         # Get total count
         total_count = query.count()
         
-        # Get verified/unverified counts
-        verified_count = db.query(func.count(QuestionBank.id)).filter(
-            QuestionBank.is_verified == True
-        ).scalar()
-        
-        unverified_count = total_count - verified_count
+        # Get verified/unverified counts from the FILTERED query
+        # Clone the query to avoid modifying the original
+        verified_count = query.filter(QuestionBank.is_verified == True).count()
+        unverified_count = query.filter(QuestionBank.is_verified == False).count()
         
         # Paginate
         offset = (page - 1) * limit
@@ -226,6 +229,135 @@ async def get_all_questions(
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to retrieve questions: {str(e)}")
+
+
+@router.get("/questions/low-quality", response_model=AdminLowQualityQuestionsResponse)
+async def get_low_quality_questions(
+    limit: int = Query(50, ge=1, le=200, description="Maximum questions to return"),
+    current_admin: dict = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get questions that need review based on quality criteria.
+    
+    **Criteria:**
+    - Quality score < 0.5
+    - Accuracy rate < 30% (if used enough times)
+    - Very high or very low accuracy (possible issue)
+    
+    **Use Case:** Admin quality assurance - identify problematic questions
+    
+    **Example:**
+    GET /api/admin/questions/low-quality?limit=50
+    
+    **Returns:**
+    - List of low-quality questions
+    - Criteria used for identification
+    
+    **Requires:** Admin authentication
+    """
+    try:
+        # Find questions with low quality score
+        low_quality_questions = db.query(QuestionBank).filter(
+            QuestionBank.quality_score < 0.5
+        ).all()
+        
+        # Find questions with poor accuracy (used at least 10 times)
+        poor_accuracy_questions = db.query(QuestionBank).filter(
+            QuestionBank.times_used >= 10,
+            (QuestionBank.times_correct * 1.0 / QuestionBank.times_used) < 0.3
+        ).all()
+        
+        # Combine and deduplicate
+        all_low_quality = {q.id: q for q in low_quality_questions}
+        for q in poor_accuracy_questions:
+            all_low_quality[q.id] = q
+        
+        questions_list = list(all_low_quality.values())[:limit]
+        
+        # Convert to response format
+        question_responses = [
+            AdminQuestion(
+                id=q.id,
+                language_id=q.language_id,
+                mapping_id=q.mapping_id,
+                sub_topic=q.sub_topic,
+                difficulty=q.difficulty,
+                question_data=q.question_data,
+                content_hash=q.content_hash,
+                is_verified=q.is_verified,
+                quality_score=q.quality_score,
+                times_used=q.times_used,
+                times_correct=q.times_correct,
+                calibrated_difficulty=q.calibrated_difficulty,
+                created_at=q.created_at.isoformat() if q.created_at else "",
+                created_by=q.created_by,
+                review_notes=getattr(q, 'review_notes', None)
+            )
+            for q in questions_list
+        ]
+        
+        return AdminLowQualityQuestionsResponse(
+            questions=question_responses,
+            total_count=len(question_responses),
+            criteria={
+                "low_quality_score": "< 0.5",
+                "poor_accuracy": "< 30% (min 10 uses)",
+                "suspicious_accuracy": "> 95% or < 5% (min 20 uses)"
+            }
+        )
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve low-quality questions: {str(e)}")
+
+
+@router.get("/questions/{question_id}", response_model=AdminQuestion)
+async def get_question_by_id(
+    question_id: str,
+    current_admin: dict = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get a single question by ID.
+    
+    **Use Case:** Admin viewing/editing a specific question from reports or analytics
+    
+    **Example:**
+    GET /api/admin/questions/123e4567-e89b-12d3-a456-426614174000
+    
+    **Returns:**
+    - Complete question data including question_data JSONB
+    
+    **Requires:** Admin authentication
+    """
+    try:
+        question = db.query(QuestionBank).filter(QuestionBank.id == question_id).first()
+        
+        if not question:
+            raise ValueError(f"Question {question_id} not found")
+        
+        return AdminQuestion(
+            id=question.id,
+            language_id=question.language_id,
+            mapping_id=question.mapping_id,
+            sub_topic=question.sub_topic,
+            difficulty=question.difficulty,
+            question_data=question.question_data,
+            content_hash=question.content_hash,
+            is_verified=question.is_verified,
+            quality_score=question.quality_score,
+            times_used=question.times_used,
+            times_correct=question.times_correct,
+            calibrated_difficulty=question.calibrated_difficulty,
+            created_at=question.created_at.isoformat() if question.created_at else "",
+            created_by=question.created_by,
+            review_notes=getattr(question, 'review_notes', None)
+        )
+    
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve question: {str(e)}")
 
 
 @router.patch("/questions/{question_id}", response_model=AdminQuestionUpdateResponse)
@@ -561,85 +693,6 @@ async def get_question_analytics(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to retrieve analytics: {str(e)}")
 
-
-@router.get("/questions/low-quality", response_model=AdminLowQualityQuestionsResponse)
-async def get_low_quality_questions(
-    limit: int = Query(50, ge=1, le=200, description="Maximum questions to return"),
-    current_admin: dict = Depends(get_current_admin_user),
-    db: Session = Depends(get_db)
-):
-    """
-    Get questions that need review based on quality criteria.
-    
-    **Criteria:**
-    - Quality score < 0.5
-    - Accuracy rate < 30% (if used enough times)
-    - Very high or very low accuracy (possible issue)
-    
-    **Use Case:** Admin quality assurance - identify problematic questions
-    
-    **Example:**
-    GET /api/admin/questions/low-quality?limit=50
-    
-    **Returns:**
-    - List of low-quality questions
-    - Criteria used for identification
-    
-    **Requires:** Admin authentication
-    """
-    try:
-        # Find questions with low quality score
-        low_quality_questions = db.query(QuestionBank).filter(
-            QuestionBank.quality_score < 0.5
-        ).all()
-        
-        # Find questions with poor accuracy (used at least 10 times)
-        poor_accuracy_questions = db.query(QuestionBank).filter(
-            QuestionBank.times_used >= 10,
-            (QuestionBank.times_correct * 1.0 / QuestionBank.times_used) < 0.3
-        ).all()
-        
-        # Combine and deduplicate
-        all_low_quality = {q.id: q for q in low_quality_questions}
-        for q in poor_accuracy_questions:
-            all_low_quality[q.id] = q
-        
-        questions_list = list(all_low_quality.values())[:limit]
-        
-        # Convert to response format
-        question_responses = [
-            AdminQuestion(
-                id=q.id,
-                language_id=q.language_id,
-                mapping_id=q.mapping_id,
-                sub_topic=q.sub_topic,
-                difficulty=q.difficulty,
-                question_data=q.question_data,
-                content_hash=q.content_hash,
-                is_verified=q.is_verified,
-                quality_score=q.quality_score,
-                times_used=q.times_used,
-                times_correct=q.times_correct,
-                calibrated_difficulty=q.calibrated_difficulty,
-                created_at=q.created_at.isoformat() if q.created_at else "",
-                created_by=q.created_by,
-                review_notes=getattr(q, 'review_notes', None)
-            )
-            for q in questions_list
-        ]
-        
-        return AdminLowQualityQuestionsResponse(
-            questions=question_responses,
-            total_count=len(question_responses),
-            criteria={
-                "low_quality_score": "< 0.5",
-                "poor_accuracy": "< 30% (min 10 uses)",
-                "suspicious_accuracy": "> 95% or < 5% (min 20 uses)"
-            }
-        )
-    
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve low-quality questions: {str(e)}")
 
 @router.get("/users/analytics", response_model=AdminUserAnalytics)
 async def get_user_analytics(

@@ -536,3 +536,69 @@ class AdminLowQualityQuestionsResponse(BaseModel):
     criteria: dict = Field(..., description="Criteria used to identify low quality questions")
 
 
+# ==================== Question Reporting ====================
+
+class CreateQuestionReportRequest(BaseModel):
+    """Request to create a new question report"""
+    question_id: str = Field(..., description="UUID of the question being reported")
+    session_id: Optional[str] = Field(None, description="Exam session ID if reporting during/after exam")
+    report_type: Literal['incorrect_answer', 'missing_correct', 'confusing_wording', 
+                         'explanation_mismatch', 'other'] = Field(..., description="Type of issue")
+    description: str = Field(..., min_length=10, max_length=1000, description="Detailed description of the issue")
+    
+    @validator('description')
+    def validate_description(cls, v):
+        """Ensure description is meaningful"""
+        v = v.strip()
+        if len(v) < 10:
+            raise ValueError("Description must be at least 10 characters")
+        return v
+
+
+class UpdateReportStatusRequest(BaseModel):
+    """Request to update report status (admin only)"""
+    status: Literal['resolved', 'dismissed'] = Field(..., description="New status")
+    admin_notes: Optional[str] = Field(None, max_length=500, description="Optional admin notes")
+
+
+class QuestionPreview(BaseModel):
+    """Preview information about a reported question"""
+    question_text: str
+    language_id: str
+    mapping_id: str
+    difficulty: float
+
+
+class QuestionReportResponse(BaseModel):
+    """Response model for a single question report"""
+    id: int
+    question_id: str
+    reporter_user_id: str
+    reporter_email: str
+    session_id: Optional[str]
+    report_type: str
+    description: str
+    status: str
+    created_at: str
+    resolved_at: Optional[str]
+    resolved_by: Optional[str]
+    resolved_by_email: Optional[str]
+    question_preview: Optional[QuestionPreview]
+
+    class Config:
+        from_attributes = True
+
+
+class ReportStatsResponse(BaseModel):
+    """Statistics for question reports dashboard"""
+    pending_count: int
+    resolved_count: int
+    dismissed_count: int
+    total_count: int
+
+
+class ReportListResponse(BaseModel):
+    """Paginated list of question reports"""
+    reports: List[QuestionReportResponse]
+    total_count: int
+    filtered_count: int
