@@ -16,12 +16,13 @@ class Judge0Service:
     """Service for interacting with Judge0 code execution API."""
     
     # Language ID mapping: app language_id -> Judge0 language_id
+    # Note: IDs kept for compatibility, versions reflect custom Docker container
     LANGUAGE_MAP = {
-        "python_3": 71,      # Python (3.8.1)
-        "javascript_es6": 63, # JavaScript (Node.js 12.14.0)
-        "java_17": 62,       # Java (OpenJDK 13.0.1) - closest available
-        "cpp_20": 76,        # C++ (Clang 7.0.1)
-        "go_1_21": 60,       # Go (1.13.5) - closest available
+        "python_3": 71,      # Python 3.11.0 (custom Docker upgrade from 3.8.1)
+        "javascript_es6": 63, # Node.js 20.11.0 (custom Docker upgrade from 12.14.0)
+        "java_17": 62,       # Java 13.0.1 (ID name kept for compatibility, actual version matches Judge0 base)
+        "cpp_20": 76,        # GCC 8.3.0 C++17 max (ID name kept for compatibility, C++20 not supported without GCC 10+)
+        "go_1_21": 60,       # Go 1.21.0 (custom Docker upgrade from 1.13.5)
     }
     
     def __init__(self, base_url: Optional[str] = None, timeout: int = 10):

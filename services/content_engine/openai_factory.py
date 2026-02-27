@@ -194,12 +194,12 @@ class OpenAIFactory:
         Construct engineered prompt for OpenAI.
         Returns (system_prompt, user_prompt).
         """
-        # Map language_id to human name
+        # Map language_id to human name (versions match Docker compiler versions)
         lang_map = {
-            "python_3": "Python 3",
-            "javascript_es6": "JavaScript (ES6)",
-            "java_17": "Java 17",
-            "cpp_20": "C++20",
+            "python_3": "Python 3.11",
+            "javascript_es6": "JavaScript (ES6+/Node 20)",
+            "java_17": "Java 13",  # ID kept for compatibility, actual compiler is Java 13.0.1
+            "cpp_20": "C++17",     # ID kept for compatibility, actual compiler is GCC 8.3 (C++17 max)
             "go_1_21": "Go 1.21"
         }
         lang_name = lang_map.get(language_id, language_id)
@@ -447,10 +447,10 @@ Return ONLY valid JSON matching the structure in your system instructions."""
         Construct optimized batch prompt for multiple questions in one call.
         """
         lang_map = {
-            "python_3": "Python 3",
-            "javascript_es6": "JavaScript (ES6)",
-            "java_17": "Java 17",
-            "cpp_20": "C++20",
+            "python_3": "Python 3.11",
+            "javascript_es6": "JavaScript (ES6+/Node 20)",
+            "java_17": "Java 13",  # ID kept for compatibility, actual compiler is Java 13.0.1
+            "cpp_20": "C++17",     # ID kept for compatibility, actual compiler is GCC 8.3 (C++17 max)
             "go_1_21": "Go 1.21"
         }
         lang_name = lang_map.get(language_id, language_id)
