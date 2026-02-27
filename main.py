@@ -51,6 +51,7 @@ from routers import admin_router
 from routers import user_languages_router
 from routers import reports_router
 from routers import tickets_router
+from routers import code_execution_router
 
 app = FastAPI(
     title="FYP Backend API - Adaptive Learning",
@@ -122,6 +123,9 @@ app.include_router(reports_router.router)
 
 # Register support tickets routes
 app.include_router(tickets_router.router)
+
+# Register code execution routes
+app.include_router(code_execution_router.router)
 
 
 @app.get("/")
