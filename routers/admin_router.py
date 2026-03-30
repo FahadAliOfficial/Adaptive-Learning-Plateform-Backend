@@ -6,11 +6,15 @@ Provides endpoints for admin users to manage platform users, questions, and view
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import text, func, String, cast, or_
-from typing import Optional, List
+from typing import Optional, List, Dict
 import hashlib
+import json
+from collections import defaultdict
+from datetime import datetime, timedelta, timezone
 
 from database import get_db
 from services.user_service import UserService
+from services.config import get_config
 from models.question_bank import QuestionBank, UserQuestionHistory
 from services.schemas import (
     AdminUserListResponse,
@@ -29,11 +33,80 @@ from services.schemas import (
     AdminBulkActionRequest,
     AdminBulkActionResponse,
     AdminQuestionAnalytics,
-    AdminLowQualityQuestionsResponse
+    AdminLowQualityQuestionsResponse,
+    AdminHighFailureQuestion,
+    AdminHighFailureQuestionsResponse,
+    AdminMostReportedQuestion,
+    AdminMostReportedQuestionsResponse,
+    AdminConceptTimeStat,
+    AdminConceptTimeStatsResponse,
+    AdminErrorPatternTrend,
+    AdminErrorPatternTrendsResponse
 )
 from services.auth import get_current_admin_user
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
+
+
+def _validate_window_days(window_days: int) -> int:
+    if window_days < 1 or window_days > 3650:
+        raise HTTPException(status_code=400, detail="window_days must be between 1 and 3650")
+    return window_days
+
+
+def _get_concept_name(mapping_id: str) -> str:
+    try:
+        config = get_config()
+        topic_info = config.mapping_to_topics.get(mapping_id, {})
+        for language_payload in topic_info.values():
+            topic_name = language_payload.get("name")
+            if topic_name:
+                return topic_name
+    except Exception:
+        pass
+
+    return mapping_id
+
+
+def _resolve_mapping_id(language_id: str, major_topic_id: str) -> str:
+    try:
+        return get_config().get_mapping_id(language_id, major_topic_id)
+    except Exception:
+        return major_topic_id
+
+
+def _extract_question_text(question_data: object) -> str:
+    if isinstance(question_data, dict):
+        return str(question_data.get("question_text", ""))
+    return ""
+
+
+def _get_question_reports_issue_column(db: Session) -> Optional[str]:
+    """Resolve issue column name across legacy/new question_reports schemas."""
+    columns = set()
+
+    try:
+        rows = db.execute(text("""
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_name = 'question_reports'
+        """)).fetchall()
+        columns = {str(row[0]) for row in rows if row and row[0]}
+    except Exception:
+        columns = set()
+
+    if not columns:
+        try:
+            pragma_rows = db.execute(text("PRAGMA table_info(question_reports)")).mappings().all()
+            columns = {str(row.get("name")) for row in pragma_rows if row.get("name")}
+        except Exception:
+            columns = set()
+
+    if "report_type" in columns:
+        return "report_type"
+    if "report_reason" in columns:
+        return "report_reason"
+    return None
 
 
 @router.get("/users", response_model=AdminUserListResponse)
@@ -692,6 +765,544 @@ async def get_question_analytics(
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to retrieve analytics: {str(e)}")
+
+
+@router.get("/metrics/high-failure-questions", response_model=AdminHighFailureQuestionsResponse)
+async def get_high_failure_questions(
+    language_id: Optional[str] = Query(None, description="Filter by language_id"),
+    window_days: int = Query(30, description="Window size in days (1-3650)."),
+    limit: int = Query(10, ge=1, le=50, description="Maximum questions to return"),
+    current_admin: dict = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Get questions with the highest failure rates within a time window."""
+    try:
+        validated_window_days = _validate_window_days(window_days)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=validated_window_days)
+
+        sessions_query = text("""
+            SELECT
+                es.language_id,
+                ed.questions_snapshot
+            FROM exam_details ed
+            INNER JOIN exam_sessions es ON es.id = ed.session_id
+            WHERE es.session_status = 'completed'
+              AND COALESCE(es.completed_at, es.created_at) >= :cutoff
+              AND (:language_id IS NULL OR es.language_id = :language_id)
+        """)
+
+        session_rows = db.execute(sessions_query, {
+            "cutoff": cutoff,
+            "language_id": language_id,
+        }).mappings().all()
+
+        aggregates: Dict[str, dict] = {}
+        for row in session_rows:
+            snapshot = row.get("questions_snapshot")
+            if isinstance(snapshot, str):
+                try:
+                    snapshot = json.loads(snapshot)
+                except Exception:
+                    continue
+
+            if not isinstance(snapshot, dict):
+                continue
+
+            questions_payload = snapshot.get("questions", [])
+            if not isinstance(questions_payload, list):
+                continue
+
+            session_language = str(row.get("language_id") or "")
+
+            for item in questions_payload:
+                if not isinstance(item, dict):
+                    continue
+
+                question_id = str(item.get("q_id") or "").strip()
+                if not question_id:
+                    continue
+
+                bucket = aggregates.setdefault(question_id, {
+                    "question_id": question_id,
+                    "language_id": session_language,
+                    "mapping_id": str(item.get("sub_topic") or ""),
+                    "sub_topic": item.get("sub_topic"),
+                    "question_text": str(item.get("question_text") or ""),
+                    "total_attempts": 0,
+                    "total_correct": 0,
+                    "time_sum": 0.0,
+                    "time_count": 0,
+                })
+
+                bucket["total_attempts"] += 1
+                if item.get("is_correct") is True:
+                    bucket["total_correct"] += 1
+
+                time_spent = item.get("time_spent")
+                if isinstance(time_spent, (int, float)):
+                    bucket["time_sum"] += float(time_spent)
+                    bucket["time_count"] += 1
+
+        if not aggregates:
+            return AdminHighFailureQuestionsResponse(
+                language_id=language_id,
+                window_days=validated_window_days,
+                limit=limit,
+                questions=[],
+            )
+
+        question_ids = list(aggregates.keys())
+        placeholders = ", ".join([f":q{i}" for i in range(len(question_ids))])
+        question_params = {f"q{i}": question_id for i, question_id in enumerate(question_ids)}
+
+        metadata_query = text(f"""
+            SELECT id, language_id, mapping_id, sub_topic, question_data
+            FROM question_bank
+            WHERE id IN ({placeholders})
+        """)
+        metadata_rows = db.execute(metadata_query, question_params).mappings().all()
+        metadata_map = {str(row["id"]): row for row in metadata_rows}
+
+        report_count_map: Dict[str, int] = {}
+        try:
+            report_query = text(f"""
+                SELECT qr.question_id, COUNT(*) AS report_count
+                FROM question_reports qr
+                INNER JOIN question_bank qb ON qb.id = qr.question_id
+                WHERE qr.created_at >= :cutoff
+                  AND qr.question_id IN ({placeholders})
+                  AND (:language_id IS NULL OR qb.language_id = :language_id)
+                GROUP BY qr.question_id
+            """)
+
+            report_params = {
+                "cutoff": cutoff,
+                "language_id": language_id,
+                **question_params,
+            }
+            report_rows = db.execute(report_query, report_params).mappings().all()
+            report_count_map = {
+                str(row["question_id"]): int(row["report_count"] or 0)
+                for row in report_rows
+            }
+        except Exception:
+            report_count_map = {}
+
+        questions = []
+        for question_id, aggregate in aggregates.items():
+            total_attempts = int(aggregate["total_attempts"] or 0)
+            total_correct = int(aggregate["total_correct"] or 0)
+            failure_rate = 0.0
+            if total_attempts > 0:
+                failure_rate = ((total_attempts - total_correct) / total_attempts) * 100
+
+            metadata = metadata_map.get(question_id, {})
+            mapping_id = str(
+                metadata.get("mapping_id")
+                or aggregate.get("mapping_id")
+                or metadata.get("sub_topic")
+                or ""
+            )
+            question_text = _extract_question_text(metadata.get("question_data")) or str(aggregate.get("question_text") or "")
+            avg_time_seconds = None
+            if int(aggregate["time_count"] or 0) > 0:
+                avg_time_seconds = aggregate["time_sum"] / aggregate["time_count"]
+
+            questions.append(AdminHighFailureQuestion(
+                question_id=question_id,
+                language_id=str(metadata.get("language_id") or aggregate.get("language_id") or "unknown"),
+                concept=_get_concept_name(mapping_id),
+                sub_topic=metadata.get("sub_topic") or aggregate.get("sub_topic"),
+                question_text=question_text,
+                failure_rate=round(float(failure_rate), 2),
+                total_attempts=total_attempts,
+                report_count=report_count_map.get(question_id, 0),
+                avg_time_seconds=round(float(avg_time_seconds), 2) if avg_time_seconds is not None else None,
+            ))
+
+        questions.sort(key=lambda question: (question.failure_rate, question.total_attempts), reverse=True)
+
+        return AdminHighFailureQuestionsResponse(
+            language_id=language_id,
+            window_days=validated_window_days,
+            limit=limit,
+            questions=questions[:limit],
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve high-failure questions: {str(e)}")
+
+
+@router.get("/metrics/most-reported-questions", response_model=AdminMostReportedQuestionsResponse)
+async def get_most_reported_questions(
+    language_id: Optional[str] = Query(None, description="Filter by language_id"),
+    window_days: int = Query(30, description="Window size in days (1-3650)."),
+    limit: int = Query(10, ge=1, le=50, description="Maximum questions to return"),
+    current_admin: dict = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Get questions with the highest report volume within a time window."""
+    try:
+        validated_window_days = _validate_window_days(window_days)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=validated_window_days)
+
+        issue_column = _get_question_reports_issue_column(db)
+
+        if issue_column == "report_type":
+            query = text("""
+                SELECT
+                    qr.question_id,
+                    qr.report_type AS issue_type,
+                    COUNT(*) AS report_count,
+                    MAX(qr.created_at) AS last_reported,
+                    qb.language_id,
+                    qb.mapping_id,
+                    qb.question_data,
+                    qb.times_used,
+                    qb.times_correct
+                FROM question_reports qr
+                INNER JOIN question_bank qb ON qb.id = qr.question_id
+                WHERE qr.created_at >= :cutoff
+                  AND (:language_id IS NULL OR qb.language_id = :language_id)
+                GROUP BY
+                    qr.question_id,
+                    qr.report_type,
+                    qb.language_id,
+                    qb.mapping_id,
+                    qb.question_data,
+                    qb.times_used,
+                    qb.times_correct
+                ORDER BY COUNT(*) DESC
+            """)
+        elif issue_column == "report_reason":
+            query = text("""
+                SELECT
+                    qr.question_id,
+                    qr.report_reason AS issue_type,
+                    COUNT(*) AS report_count,
+                    MAX(qr.created_at) AS last_reported,
+                    qb.language_id,
+                    qb.mapping_id,
+                    qb.question_data,
+                    qb.times_used,
+                    qb.times_correct
+                FROM question_reports qr
+                INNER JOIN question_bank qb ON qb.id = qr.question_id
+                WHERE qr.created_at >= :cutoff
+                  AND (:language_id IS NULL OR qb.language_id = :language_id)
+                GROUP BY
+                    qr.question_id,
+                    qr.report_reason,
+                    qb.language_id,
+                    qb.mapping_id,
+                    qb.question_data,
+                    qb.times_used,
+                    qb.times_correct
+                ORDER BY COUNT(*) DESC
+            """)
+        else:
+            query = text("""
+                SELECT
+                    qr.question_id,
+                    'other' AS issue_type,
+                    COUNT(*) AS report_count,
+                    MAX(qr.created_at) AS last_reported,
+                    qb.language_id,
+                    qb.mapping_id,
+                    qb.question_data,
+                    qb.times_used,
+                    qb.times_correct
+                FROM question_reports qr
+                INNER JOIN question_bank qb ON qb.id = qr.question_id
+                WHERE qr.created_at >= :cutoff
+                  AND (:language_id IS NULL OR qb.language_id = :language_id)
+                GROUP BY
+                    qr.question_id,
+                    qb.language_id,
+                    qb.mapping_id,
+                    qb.question_data,
+                    qb.times_used,
+                    qb.times_correct
+                ORDER BY COUNT(*) DESC
+            """)
+
+        rows = db.execute(query, {
+            "cutoff": cutoff,
+            "language_id": language_id,
+        }).mappings().all()
+
+        grouped: Dict[str, dict] = {}
+        for row in rows:
+            question_id = str(row["question_id"])
+            if question_id not in grouped:
+                grouped[question_id] = {
+                    "question_id": question_id,
+                    "language_id": str(row["language_id"]),
+                    "mapping_id": str(row["mapping_id"] or ""),
+                    "question_data": row["question_data"],
+                    "report_count": 0,
+                    "issue_counts": defaultdict(int),
+                    "last_reported": row["last_reported"],
+                    "times_used": int(row["times_used"] or 0),
+                    "times_correct": int(row["times_correct"] or 0),
+                }
+
+            grouped_item = grouped[question_id]
+            issue_count = int(row["report_count"] or 0)
+            grouped_item["report_count"] += issue_count
+            grouped_item["issue_counts"][str(row["issue_type"] or "other")] += issue_count
+
+            last_reported = row["last_reported"]
+            if last_reported and (grouped_item["last_reported"] is None or last_reported > grouped_item["last_reported"]):
+                grouped_item["last_reported"] = last_reported
+
+        sorted_items = sorted(grouped.values(), key=lambda item: item["report_count"], reverse=True)[:limit]
+
+        questions = []
+        for item in sorted_items:
+            times_used = item["times_used"]
+            times_correct = item["times_correct"]
+            failure_rate = 0.0
+            if times_used > 0:
+                failure_rate = ((times_used - times_correct) / times_used) * 100
+
+            main_issue = "other"
+            if item["issue_counts"]:
+                main_issue = max(item["issue_counts"].items(), key=lambda issue: issue[1])[0]
+
+            last_reported = item["last_reported"]
+            questions.append(AdminMostReportedQuestion(
+                question_id=item["question_id"],
+                language_id=item["language_id"],
+                concept=_get_concept_name(item["mapping_id"]),
+                question_text=_extract_question_text(item["question_data"]),
+                report_count=item["report_count"],
+                failure_rate=round(float(failure_rate), 2),
+                last_reported=(
+                    last_reported.isoformat()
+                    if isinstance(last_reported, datetime)
+                    else str(last_reported) if isinstance(last_reported, str) else None
+                ),
+                main_issue=main_issue,
+            ))
+
+        return AdminMostReportedQuestionsResponse(
+            language_id=language_id,
+            window_days=validated_window_days,
+            limit=limit,
+            questions=questions,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve most-reported questions: {str(e)}")
+
+
+@router.get("/metrics/concept-time-stats", response_model=AdminConceptTimeStatsResponse)
+async def get_concept_time_stats(
+    language_id: Optional[str] = Query(None, description="Filter by language_id"),
+    window_days: int = Query(30, description="Window size in days (1-3650)."),
+    limit: int = Query(10, ge=1, le=50, description="Maximum concepts to return"),
+    current_admin: dict = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Get average completion time by concept within a time window."""
+    try:
+        validated_window_days = _validate_window_days(window_days)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=validated_window_days)
+
+        query = text("""
+            SELECT
+                s.language_id,
+                s.major_topic_id,
+                COUNT(*) AS session_count,
+                COALESCE(AVG(COALESCE(s.time_taken_seconds, 0)), 0) AS avg_time_seconds,
+                COALESCE(AVG(COALESCE(s.difficulty_assigned, 0.5)), 0.5) AS avg_difficulty
+            FROM exam_sessions s
+            WHERE s.session_status = 'completed'
+              AND COALESCE(s.completed_at, s.created_at) >= :cutoff
+              AND (:language_id IS NULL OR s.language_id = :language_id)
+            GROUP BY s.language_id, s.major_topic_id
+        """)
+
+        rows = db.execute(query, {
+            "cutoff": cutoff,
+            "language_id": language_id,
+        }).mappings().all()
+
+        aggregated: Dict[str, dict] = {}
+        for row in rows:
+            row_language = str(row["language_id"])
+            major_topic_id = str(row["major_topic_id"])
+            mapping_id = _resolve_mapping_id(row_language, major_topic_id)
+            session_count = int(row["session_count"] or 0)
+            avg_time_seconds = float(row["avg_time_seconds"] or 0)
+            avg_difficulty = float(row["avg_difficulty"] or 0.5)
+
+            if mapping_id not in aggregated:
+                aggregated[mapping_id] = {
+                    "mapping_id": mapping_id,
+                    "concept": _get_concept_name(mapping_id),
+                    "session_count": 0,
+                    "weighted_time": 0.0,
+                    "weighted_difficulty": 0.0,
+                }
+
+            bucket = aggregated[mapping_id]
+            bucket["session_count"] += session_count
+            bucket["weighted_time"] += avg_time_seconds * session_count
+            bucket["weighted_difficulty"] += avg_difficulty * session_count
+
+        concepts: List[AdminConceptTimeStat] = []
+        for bucket in aggregated.values():
+            session_count = bucket["session_count"]
+            if session_count <= 0:
+                continue
+
+            concepts.append(AdminConceptTimeStat(
+                concept=bucket["concept"],
+                mapping_id=bucket["mapping_id"],
+                avg_time_seconds=round(bucket["weighted_time"] / session_count, 2),
+                avg_difficulty=round(bucket["weighted_difficulty"] / session_count, 3),
+                session_count=session_count,
+            ))
+
+        concepts.sort(key=lambda concept: concept.avg_time_seconds, reverse=True)
+
+        return AdminConceptTimeStatsResponse(
+            language_id=language_id,
+            window_days=validated_window_days,
+            limit=limit,
+            concepts=concepts[:limit],
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve concept-time stats: {str(e)}")
+
+
+@router.get("/metrics/error-pattern-trends", response_model=AdminErrorPatternTrendsResponse)
+async def get_error_pattern_trends(
+    language_id: Optional[str] = Query(None, description="Filter by language_id"),
+    window_days: int = Query(30, description="Window size in days (1-3650)."),
+    limit: int = Query(10, ge=1, le=50, description="Maximum error patterns to return"),
+    current_admin: dict = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Get most frequent error patterns, percentages, and short-term trend direction."""
+    try:
+        validated_window_days = _validate_window_days(window_days)
+        now = datetime.now(timezone.utc)
+        cutoff = now - timedelta(days=validated_window_days)
+        trend_current_cutoff = now - timedelta(days=7)
+        trend_previous_cutoff = now - timedelta(days=14)
+
+        counts_query = text("""
+            SELECT
+                eh.error_type,
+                COUNT(*) AS error_count
+            FROM error_history eh
+            WHERE eh.occurred_at >= :cutoff
+              AND (:language_id IS NULL OR eh.language_id = :language_id)
+            GROUP BY eh.error_type
+            ORDER BY COUNT(*) DESC
+        """)
+        counts_rows = db.execute(counts_query, {
+            "cutoff": cutoff,
+            "language_id": language_id,
+        }).mappings().all()
+
+        trend_query = text("""
+            SELECT
+                eh.error_type,
+                SUM(CASE WHEN eh.occurred_at >= :trend_current_cutoff THEN 1 ELSE 0 END) AS current_count,
+                SUM(CASE WHEN eh.occurred_at >= :trend_previous_cutoff AND eh.occurred_at < :trend_current_cutoff THEN 1 ELSE 0 END) AS previous_count
+            FROM error_history eh
+            WHERE eh.occurred_at >= :trend_previous_cutoff
+              AND (:language_id IS NULL OR eh.language_id = :language_id)
+            GROUP BY eh.error_type
+        """)
+        trend_rows = db.execute(trend_query, {
+            "trend_current_cutoff": trend_current_cutoff,
+            "trend_previous_cutoff": trend_previous_cutoff,
+            "language_id": language_id,
+        }).mappings().all()
+        trend_map = {
+            str(row["error_type"]): {
+                "current": int(row["current_count"] or 0),
+                "previous": int(row["previous_count"] or 0),
+            }
+            for row in trend_rows
+        }
+
+        concept_query = text("""
+            SELECT
+                eh.error_type,
+                eh.mapping_id,
+                COUNT(*) AS concept_count
+            FROM error_history eh
+            WHERE eh.occurred_at >= :cutoff
+              AND (:language_id IS NULL OR eh.language_id = :language_id)
+            GROUP BY eh.error_type, eh.mapping_id
+            ORDER BY eh.error_type, COUNT(*) DESC
+        """)
+        concept_rows = db.execute(concept_query, {
+            "cutoff": cutoff,
+            "language_id": language_id,
+        }).mappings().all()
+
+        top_concepts_map: Dict[str, List[str]] = defaultdict(list)
+        for row in concept_rows:
+            error_type = str(row["error_type"])
+            mapping_id = str(row["mapping_id"] or "")
+            concept_name = _get_concept_name(mapping_id)
+
+            existing = top_concepts_map[error_type]
+            if concept_name and concept_name not in existing and len(existing) < 3:
+                existing.append(concept_name)
+
+        total_errors = sum(int(row["error_count"] or 0) for row in counts_rows)
+        patterns: List[AdminErrorPatternTrend] = []
+
+        for row in counts_rows[:limit]:
+            error_type = str(row["error_type"])
+            count = int(row["error_count"] or 0)
+            percentage = (count * 100.0 / total_errors) if total_errors > 0 else 0.0
+
+            trend_values = trend_map.get(error_type, {"current": 0, "previous": 0})
+            current_count = trend_values["current"]
+            previous_count = trend_values["previous"]
+            if current_count > previous_count:
+                trend = "up"
+            elif current_count < previous_count:
+                trend = "down"
+            else:
+                trend = "stable"
+
+            patterns.append(AdminErrorPatternTrend(
+                error_type=error_type,
+                count=count,
+                percentage=round(percentage, 2),
+                top_concepts=top_concepts_map.get(error_type, []),
+                trend=trend,
+            ))
+
+        return AdminErrorPatternTrendsResponse(
+            language_id=language_id,
+            window_days=validated_window_days,
+            limit=limit,
+            total_errors=total_errors,
+            patterns=patterns,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve error-pattern trends: {str(e)}")
 
 
 @router.get("/users/analytics", response_model=AdminUserAnalytics)

@@ -538,6 +538,86 @@ class AdminLowQualityQuestionsResponse(BaseModel):
     criteria: dict = Field(..., description="Criteria used to identify low quality questions")
 
 
+class AdminHighFailureQuestion(BaseModel):
+    """Question-level failure metrics for admin quality dashboard."""
+    question_id: str
+    language_id: str
+    concept: str
+    sub_topic: Optional[str]
+    question_text: str
+    failure_rate: float
+    total_attempts: int
+    report_count: int
+    avg_time_seconds: Optional[float]
+
+
+class AdminHighFailureQuestionsResponse(BaseModel):
+    """Response for high-failure questions metrics endpoint."""
+    success: bool = True
+    language_id: Optional[str]
+    window_days: int
+    limit: int
+    questions: List[AdminHighFailureQuestion]
+
+
+class AdminMostReportedQuestion(BaseModel):
+    """Question-level report metrics for admin quality dashboard."""
+    question_id: str
+    language_id: str
+    concept: str
+    question_text: str
+    report_count: int
+    failure_rate: float
+    last_reported: Optional[str]
+    main_issue: str
+
+
+class AdminMostReportedQuestionsResponse(BaseModel):
+    """Response for most-reported questions metrics endpoint."""
+    success: bool = True
+    language_id: Optional[str]
+    window_days: int
+    limit: int
+    questions: List[AdminMostReportedQuestion]
+
+
+class AdminConceptTimeStat(BaseModel):
+    """Concept-level timing metrics for admin quality dashboard."""
+    concept: str
+    mapping_id: str
+    avg_time_seconds: float
+    avg_difficulty: float
+    session_count: int
+
+
+class AdminConceptTimeStatsResponse(BaseModel):
+    """Response for concept-time metrics endpoint."""
+    success: bool = True
+    language_id: Optional[str]
+    window_days: int
+    limit: int
+    concepts: List[AdminConceptTimeStat]
+
+
+class AdminErrorPatternTrend(BaseModel):
+    """Error-pattern trend metrics for admin quality dashboard."""
+    error_type: str
+    count: int
+    percentage: float
+    top_concepts: List[str]
+    trend: Literal["up", "down", "stable"]
+
+
+class AdminErrorPatternTrendsResponse(BaseModel):
+    """Response for error-pattern trends metrics endpoint."""
+    success: bool = True
+    language_id: Optional[str]
+    window_days: int
+    limit: int
+    total_errors: int
+    patterns: List[AdminErrorPatternTrend]
+
+
 # ==================== Question Reporting ====================
 
 class CreateQuestionReportRequest(BaseModel):
