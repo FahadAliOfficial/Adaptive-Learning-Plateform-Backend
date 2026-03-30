@@ -52,6 +52,7 @@ from routers import user_languages_router
 from routers import reports_router
 from routers import tickets_router
 from routers import code_execution_router
+from routers import dashboard_router
 
 app = FastAPI(
     title="FYP Backend API - Adaptive Learning",
@@ -111,6 +112,9 @@ app.include_router(analytics_router.router)
 
 # Register RL routes
 app.include_router(rl_router.router)
+
+# Register dashboard routes
+app.include_router(dashboard_router.router)
 
 # Register admin routes
 app.include_router(admin_router.router)
@@ -249,11 +253,11 @@ async def start_exam_session(
         db.execute(text("""
             INSERT INTO exam_sessions (
                 id, user_id, language_id, major_topic_id, 
-                session_type, session_status, started_at, created_at
+                session_type, session_status, rl_action_taken, started_at, created_at
             )
             VALUES (
                 :session_id, :user_id, :language_id, :major_topic_id,
-                :session_type, 'started', :started_at, :created_at
+                :session_type, 'started', :rl_action_taken, :started_at, :created_at
             )
         """), {
             "session_id": session_id,
@@ -261,6 +265,7 @@ async def start_exam_session(
             "language_id": payload.language_id,
             "major_topic_id": payload.major_topic_id,
             "session_type": payload.session_type,
+            "rl_action_taken": str(payload.rl_action_id) if payload.rl_action_id is not None else None,
             "started_at": started_at,
             "created_at": started_at
         })

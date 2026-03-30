@@ -102,6 +102,7 @@ class StateVectorGenerator:
         # 2. Decayed Mastery Scores [mastery_offset : mastery_offset + num_mappings]
         logger.debug(f"[StateVector] Step 2: Fetching mastery scores")
         mastery_map = self._get_decayed_mastery(user_id, language_id)
+        mastery_details = self._get_detailed_mastery_info(user_id, language_id)  # NEW: Get detailed info for metadata
         logger.debug(f"[StateVector] Got {len(mastery_map)} mastery scores")
         for i, mapping_id in enumerate(self.mappings_order):
             vector[self.mastery_offset + i] = mastery_map.get(mapping_id, 0.0)
@@ -136,12 +137,16 @@ class StateVectorGenerator:
         vector[self.behavioral_offset + 5] = metrics['gate_readiness']
         vector[self.behavioral_offset + 6] = metrics['session_confidence']  # Cold-start signal
         vector[self.behavioral_offset + 7] = metrics['performance_velocity']  # Fast learner detection
-        vector[self.behavioral_offset + 8] = metrics['adaptive_difficulty']  # Phase 2B: Recommended next difficulty
+        # PHASE 1 FIX: Feature [37] uses experience level encoding (matches training archetype)
+        vector[self.behavioral_offset + 8] = metrics['experience_level_encoding']
         
         # 6. Generate rich metadata (prerequisites, transfer potential, errors)
         logger.debug(f"[StateVector] Step 6: Generating metadata")
         try:
-            metadata = self._generate_metadata(vector, user_id, language_id, mastery_map)
+            metadata = self._generate_metadata(
+                vector, user_id, language_id, mastery_map, 
+                mastery_details, fluency_map, confidence_map
+            )
             logger.debug(f"[StateVector] Metadata generated successfully")
         except Exception as e:
             logger.error(f"[StateVector] ERROR in metadata generation: {type(e).__name__}: {str(e)}")
@@ -191,6 +196,43 @@ class StateVectorGenerator:
             decayed_scores[mapping_id] = max(decayed_value, 0.0)
         
         return decayed_scores
+    
+    def _get_detailed_mastery_info(self, user_id: str, language_id: str) -> List[Dict]:
+        """
+        Fetch detailed mastery information for metadata.
+        Returns list of dicts with: mapping_id, mastery, days_since_practice, last_practiced
+        """
+        query = text("""
+            SELECT mapping_id, mastery_score, last_practiced_at 
+            FROM student_state 
+            WHERE user_id=:u AND language_id=:l
+        """)
+        
+        rows = self.db.execute(query, {"u": user_id, "l": language_id}).fetchall()
+        
+        detailed_info = []
+        now = datetime.now(timezone.utc)
+        
+        for row in rows:
+            mapping_id, score, last_date = row
+            
+            # Parse datetime if it's a string (SQLite compatibility)
+            if isinstance(last_date, str):
+                last_date = datetime.fromisoformat(last_date.replace('Z', '+00:00'))
+            
+            # Calculate days passed
+            if last_date.tzinfo is None:
+                last_date = last_date.replace(tzinfo=timezone.utc)
+            days_passed = (now - last_date).days
+            
+            detailed_info.append({
+                'mapping_id': mapping_id,
+                'mastery': float(score),
+                'days_since_practice': days_passed,
+                'last_practiced': last_date.isoformat()
+            })
+        
+        return detailed_info
     
     def _get_fluency_scores(self, user_id: str, language_id: str) -> Dict[str, float]:
         """Fetch fluency scores (speed/efficiency) per topic."""
@@ -304,6 +346,12 @@ class StateVectorGenerator:
         is_high_velocity = (last_accuracy > 0.9 and last_difficulty > 0.6)
         performance_velocity = 1.0 if is_high_velocity else 0.0
         
+        # PHASE 1 FIX: Feature [37] - Experience level encoding (matches training archetype)
+        # beginner=0.0, intermediate=0.5, advanced=1.0
+        experience_level = self._get_user_experience_level(user_id)
+        archetype_encoding = {'beginner': 0.0, 'intermediate': 0.5, 'advanced': 1.0}
+        experience_level_encoding = archetype_encoding.get(experience_level, 0.0)
+        
         return {
             'last_accuracy': round(last_accuracy, 3),
             'last_difficulty': round(last_difficulty, 3),
@@ -313,7 +361,7 @@ class StateVectorGenerator:
             'gate_readiness': round(gate_readiness, 3),
             'session_confidence': round(session_confidence, 3),  # NEW: Cold-start signal
             'performance_velocity': round(performance_velocity, 1),  # Fast learner flag
-            'adaptive_difficulty': round(adaptive_difficulty, 3)  # Phase 2B: Next recommended difficulty
+            'experience_level_encoding': round(experience_level_encoding, 1)  # PHASE 1: Matches training
         }
     
     def _calculate_gate_readiness(self, user_id: str, language_id: str) -> float:
@@ -370,17 +418,56 @@ class StateVectorGenerator:
         
         return sum(readiness_scores) / len(readiness_scores) if readiness_scores else 1.0
     
+    def _get_user_experience_level(self, user_id: str) -> str:
+        """
+        Get user's experience level from database.
+        
+        PHASE 1 FIX: Used for Feature [37] experience level encoding
+        that matches training archetype signal.
+        
+        Returns:
+            'beginner', 'intermediate', or 'advanced'
+        """
+        query = text("""
+            SELECT experience_level
+            FROM users
+            WHERE id = :u
+        """)
+        
+        result = self.db.execute(query, {"u": user_id}).scalar()
+        
+        # Default to beginner if not set or user not found
+        if result and result in ['beginner', 'intermediate', 'advanced']:
+            return result
+        return 'beginner'
+    
     def _generate_metadata(
         self, 
         vector: np.ndarray, 
         user_id: str, 
         language_id: str,
-        mastery_map: Dict[str, float]
+        mastery_map: Dict[str, float],
+        mastery_details: List[Dict],
+        fluency_map: Dict[str, float],
+        confidence_map: Dict[str, float]
     ) -> Dict:
         """
         Generate human-readable interpretation of state vector.
         Includes prerequisites, transfer potential, and error patterns.
         """
+        
+        # Build mastery_breakdown for dashboard (includes fluency, confidence, last_practiced)
+        mastery_breakdown = []
+        for detail in mastery_details:
+            mapping_id = detail['mapping_id']
+            mastery_breakdown.append({
+                'mapping_id': mapping_id,
+                'mastery': detail['mastery'],
+                'days_since_practice': detail['days_since_practice'],
+                'last_practiced': detail['last_practiced'],
+                'confidence': confidence_map.get(mapping_id, 0.0),
+                'fluency': fluency_map.get(mapping_id, 1.0)
+            })
         
         # Find strongest and weakest topics
         topic_strengths = [
@@ -411,6 +498,7 @@ class StateVectorGenerator:
         return {
             "user_id": user_id,
             "language": language_id,
+            "mastery_breakdown": mastery_breakdown,  # NEW: For dashboard RL recommendations
             "strongest_topic": {"id": strongest[0], "mastery": round(float(strongest[1]), 3)},
             "weakest_topic": {"id": weakest[0], "mastery": round(float(weakest[1]), 3)},
             "needs_review": needs_review,

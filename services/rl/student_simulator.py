@@ -41,6 +41,7 @@ class StudentProfile:
     focus_span: int  # Max topics before fatigue (10-25)
     optimal_accuracy_range: Tuple[float, float]  # Preferred success rate
     archetype: str = "beginner"  # P3 FIX: Student archetype for cross-episode conditioning
+    current_language: str = "python_3"  # PHASE 1 FIX: Track language for difficulty modifiers
     
     # FIX #2: Error remediation tracking
     recent_errors: List[str] = field(default_factory=list)  # Last 10 error types made
@@ -125,6 +126,14 @@ class StudentSimulator:
                 'steepness': gate.get('penalty_steepness', 2.0),
                 'min_score': gate.get('minimum_allowable_score', 0.55)
             }
+        
+        # PHASE 1 FIX: Build language-specific difficulty modifier lookup
+        # Format: {(language_id, mapping_id): multiplier}
+        # Example: C++ variables are 1.4× harder, Python syntax 0.8× easier
+        self.lang_difficulty_modifiers = {}
+        for mod in config.transition_map.get('language_specific_modifiers', []):
+            key = (mod['language_id'], mod['mapping_id'])
+            self.lang_difficulty_modifiers[key] = mod['difficulty_multiplier']
         
         # ═══════════════════════════════════════════════════════════════════
         # FIX #2: ERROR REMEDIATION - Load error taxonomy
@@ -213,10 +222,24 @@ class StudentSimulator:
                     m: np.random.uniform(0.30, 0.45) for m in UNIVERSAL_MAPPINGS
                 }
                 archetype = "intermediate"
-            else:  # 15% advanced (hard but achievable)
+            elif i < 95:  # 10% advanced (hard but achievable)
                 # Start with 50-65% mastery - can still reach 60%+ goal
                 initial_mastery = {
                     m: np.random.uniform(0.50, 0.65) for m in UNIVERSAL_MAPPINGS
+                }
+                archetype = "advanced"
+            else:  # 5% true_advanced - matches production (initial_mastery_estimate=0.80)
+                # Mirrors transition_map.json advanced profile:
+                # assumed_mastered: SYN_LOGIC, SYN_PREC, VAR, COND, LOOP, FUNC, COLL → high mastery
+                # Only OOP remains as the learning frontier
+                easy_topics = [
+                    "UNIV_SYN_LOGIC", "UNIV_SYN_PREC", "UNIV_VAR",
+                    "UNIV_COND", "UNIV_LOOP", "UNIV_FUNC", "UNIV_COLL"
+                ]
+                initial_mastery = {
+                    m: (np.random.uniform(0.75, 0.90) if m in easy_topics
+                        else np.random.uniform(0.55, 0.75))
+                    for m in UNIVERSAL_MAPPINGS
                 }
                 archetype = "advanced"
             
@@ -230,9 +253,15 @@ class StudentSimulator:
             consistency = np.random.uniform(0.6, 0.95)
             
             # Dropout threshold (frustration tolerance)
-            # FIXED: Was 0.15-0.35 (too aggressive) - students quit too easily
-            # Now 0.05-0.15 for more realistic patience
-            dropout_threshold = np.random.uniform(0.05, 0.15)  # Quit if accuracy < this
+            # PHASE 2 FIX: Tighter range based on challenge_preference
+            # Was 0.05-0.15 (3× variance), now 0.06-0.12 (2× variance)
+            base_threshold = 0.08  # Median patience
+            variance = challenge_pref * 0.02  # Risk-takers marginally more patient
+            dropout_threshold = np.clip(
+                base_threshold + np.random.uniform(-variance, variance),
+                0.06,  # Minimum
+                0.12   # Maximum
+            )
             
             # Focus span (attention limit)
             focus_span = int(np.random.uniform(12, 22))
@@ -262,7 +291,8 @@ class StudentSimulator:
         profile: StudentProfile,
         topic: str,
         difficulty: float,
-        current_mastery: float
+        current_mastery: float,
+        all_masteries: dict = None
     ) -> Tuple[float, float, bool]:
         """
         Simulate how a student performs on an exam.
@@ -274,12 +304,14 @@ class StudentSimulator:
         - Fast learners perform slightly better than mastery suggests
         - Performance has consistency-based variance
         - Students may quit if frustrated (accuracy < dropout_threshold)
+        - CURRICULUM: Students struggle more when prerequisites unmet
         
         Args:
             profile: Student characteristics
             topic: Which universal mapping (UNIV_VAR, etc.)
             difficulty: Exam difficulty (0.3-1.0)
-            current_mastery: Student's current mastery of topic
+            current_mastery: Student's current mastery for THIS topic (0.0-1.0)
+            all_masteries: Dict of all topic masteries (for prerequisite checking)
         
         Returns:
             Tuple of (accuracy, time_ratio, gave_up):
@@ -297,7 +329,12 @@ class StudentSimulator:
         """
         
         # 1. Base accuracy (depends on mastery vs difficulty gap)
-        mastery_gap = difficulty - current_mastery
+        # PHASE 1 FIX: Apply language-specific difficulty modifier
+        lang_id = getattr(profile, 'current_language', 'python_3')
+        modifier = self.lang_difficulty_modifiers.get((lang_id, topic), 1.0)
+        effective_difficulty = difficulty * modifier
+        
+        mastery_gap = effective_difficulty - current_mastery
         
         # FIXED: Replaced cliff-edge thresholds with smooth sigmoid curve
         # Old approach had hard jumps (0.4x → 0.7x) that RL agents exploit
@@ -337,6 +374,30 @@ class StudentSimulator:
         noise = np.random.normal(0, (1 - profile.consistency) * 0.15)
         actual_accuracy = np.clip(base_accuracy + noise, 0.0, 1.0)
         
+        # 3.5. CURRICULUM CONSTRAINT: Penalize performance if prerequisites unmet
+        # Student struggles significantly when learning advanced topics without foundation
+        gate_info = self.get_soft_gate_info(topic)
+        frustration_bonus = 0.0
+        difficulty_slowdown_bonus = 1.0
+        
+        if gate_info and all_masteries:
+            prereqs = gate_info.get('prereqs', [])
+            min_score = gate_info.get('min_score', 0.55)
+            
+            if prereqs:
+                # Calculate how many prerequisites are unmet
+                unmet_prereqs = sum(1 for prereq in prereqs 
+                                   if prereq in all_masteries and all_masteries[prereq] < min_score)
+                prereq_readiness = 1.0 - (unmet_prereqs / len(prereqs))  # 0.0 to 1.0
+                
+                if prereq_readiness < 0.8:  # Less than 80% of prereqs met
+                    # Student performs worse (50-100% of expected accuracy)
+                    actual_accuracy *= (0.5 + 0.5 * prereq_readiness)
+                    # Takes more time (100-150% of normal time)
+                    difficulty_slowdown_bonus = 1.0 + 0.5 * (1.0 - prereq_readiness)
+                    # Gets more frustrated faster
+                    frustration_bonus = 0.3 * (1.0 - prereq_readiness)
+        
         # 4. Check for dropout (frustration quit)
         # ═══════════════════════════════════════════════════════════════════
         # FIX P3: Psychological dropout based on PERCEIVED difficulty
@@ -348,7 +409,7 @@ class StudentSimulator:
         
         # Calculate frustration level (0-1 scale)
         # High frustration when: difficulty >> mastery AND low accuracy
-        frustration = 0.0
+        frustration = frustration_bonus  # Start with prerequisite frustration
         if mastery_gap > 0.2:  # Content significantly harder than mastery
             frustration += mastery_gap * 0.5  # Base frustration from difficulty gap
         if actual_accuracy < 0.4:  # Struggling (even with guessing)
@@ -369,6 +430,7 @@ class StudentSimulator:
         # Fast learners are quicker, difficult exams take longer
         base_time_ratio = 1.0 / profile.learning_rate
         difficulty_slowdown = 1.0 + (mastery_gap * 0.5) if mastery_gap > 0 else 1.0
+        difficulty_slowdown *= difficulty_slowdown_bonus  # Apply prerequisite penalty
         
         time_ratio = base_time_ratio * difficulty_slowdown
         time_ratio = np.clip(time_ratio, 0.5, 2.0)

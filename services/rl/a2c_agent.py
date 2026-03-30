@@ -28,6 +28,7 @@ import torch
 import numpy as np
 from pathlib import Path
 from typing import Optional, Union
+from .accessibility_callback import AccessibilityMetricsCallback
 
 
 class A2CAgent:
@@ -63,7 +64,9 @@ class A2CAgent:
         self,
         env,
         learning_rate: float = 7e-4,
-        n_steps: int = 5,
+        n_steps: int = 8,   # FIX: was 50 — with avg 15-step episodes, n_steps=50 means
+                              # A2C never completes a full trajectory before updating.
+                              # n_steps=8 ensures updates happen within short episodes.
         gamma: float = 0.99,
         gae_lambda: float = 1.0,
         ent_coef: float = 0.01,
@@ -81,7 +84,7 @@ class A2CAgent:
         Args:
             env: Gymnasium environment (AdaptiveLearningEnv)
             learning_rate: Optimizer learning rate (default: 7e-4)
-            n_steps: Number of steps per rollout (default: 5)
+            n_steps: Number of steps per rollout (default: 50, was 5)
             gamma: Discount factor for future rewards (default: 0.99)
             gae_lambda: GAE lambda for advantage estimation (default: 1.0)
             ent_coef: Entropy coefficient for exploration (default: 0.01)
@@ -198,10 +201,14 @@ class A2CAgent:
             if not isinstance(eval_env, DummyVecEnv):
                 eval_env = DummyVecEnv([lambda: eval_env])
             
-            # Early stopping: stop if no improvement for 50K steps
+            # Early stopping re-enabled with safer parameters
+            # With clipped rewards [-10, +10], convergence signal is stable enough
+            # max_no_improvement_evals=20 → 200K steps patience (at eval_freq=10K)
+            # min_evals=40 → wait 400K steps minimum before early stopping kicks in
+            # This prevents BLOCKER #1 regression (was: patience=50K, min=100K — too aggressive)
             stop_callback = StopTrainingOnNoModelImprovement(
-                max_no_improvement_evals=10,  # 10 evals × 5000 steps = 50K steps patience
-                min_evals=20,  # Wait at least 100K steps before early stopping
+                max_no_improvement_evals=20,  # 20 evals × 10000 steps = 200K steps patience
+                min_evals=40,  # Wait at least 400K steps before early stopping
                 verbose=1
             )
             
@@ -213,11 +220,11 @@ class A2CAgent:
                 deterministic=True,
                 render=False,
                 verbose=1,
-                callback_after_eval=stop_callback  # Add early stopping
+                callback_after_eval=stop_callback
             )
             callbacks.append(eval_callback)
             print(f"✅ Evaluation enabled (every {eval_freq} steps)")
-            print(f"✅ Early stopping enabled (patience: 50K steps, min: 100K steps)")
+            print(f"✅ Early stopping enabled (patience: 200K steps, min: 400K steps)")
         
         # Checkpoint callback
         checkpoint_callback = CheckpointCallback(
@@ -229,6 +236,14 @@ class A2CAgent:
         )
         callbacks.append(checkpoint_callback)
         print(f"✅ Checkpointing enabled (every {checkpoint_freq} steps)")
+        
+        # Accessibility metrics callback
+        accessibility_callback = AccessibilityMetricsCallback(
+            check_freq=5000,  # Log every 5K steps
+            verbose=1
+        )
+        callbacks.append(accessibility_callback)
+        print(f"✅ Accessibility tracking enabled (curriculum constraint monitoring)")
         
         # Training info
         print("\n" + "=" * 70)

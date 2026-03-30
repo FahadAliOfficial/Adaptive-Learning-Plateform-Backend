@@ -69,6 +69,8 @@ class ExamStartRequest(BaseModel):
     language_id: LanguageIdType = Field(..., description="Language identifier from curriculum")
     major_topic_id: str = Field(..., description="e.g., 'PY_VAR_01', 'JS_FUNC_01'")
     session_type: Literal["diagnostic", "practice", "exam", "review"] = Field(default="practice")
+    rl_action_id: Optional[int] = Field(None, description="RL action ID if session started from recommendation")
+    rl_recommendation_id: Optional[str] = Field(None, description="UUID of the RL recommendation entry")
 
     @validator('user_id')
     def validate_uuid(cls, v):
@@ -325,7 +327,7 @@ class RecommendationRequest(BaseModel):
     user_id: str = Field(..., description="User UUID")
     language_id: LanguageIdType = Field(..., description="Language identifier from curriculum")
     strategy: Literal["ppo", "dqn", "a2c", "ensemble", "baseline"] = Field(
-        default="a2c",
+        default="dqn",
         description="RL model strategy to use for recommendation"
     )
     deterministic: bool = Field(

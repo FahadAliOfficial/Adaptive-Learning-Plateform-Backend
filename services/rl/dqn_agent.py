@@ -28,6 +28,7 @@ import torch
 import numpy as np
 from pathlib import Path
 from typing import Optional, Union
+from .accessibility_callback import AccessibilityMetricsCallback
 
 
 class DQNAgent:
@@ -204,10 +205,14 @@ class DQNAgent:
             if not isinstance(eval_env, DummyVecEnv):
                 eval_env = DummyVecEnv([lambda: eval_env])
             
-            # Early stopping: stop if no improvement for 50K steps
+            # Early stopping re-enabled with safer parameters
+            # With clipped rewards [-10, +10], convergence signal is stable enough
+            # max_no_improvement_evals=20 → 200K steps patience (at eval_freq=10K)
+            # min_evals=40 → wait 400K steps minimum before early stopping kicks in
+            # This prevents BLOCKER #1 regression (was: patience=50K, min=100K — too aggressive)
             stop_callback = StopTrainingOnNoModelImprovement(
-                max_no_improvement_evals=10,  # 10 evals × 5000 steps = 50K steps patience
-                min_evals=20,  # Wait at least 100K steps before early stopping
+                max_no_improvement_evals=20,  # 20 evals × 10000 steps = 200K steps patience
+                min_evals=40,  # Wait at least 400K steps before early stopping
                 verbose=1
             )
             
@@ -219,11 +224,11 @@ class DQNAgent:
                 deterministic=True,
                 render=False,
                 verbose=1,
-                callback_after_eval=stop_callback  # Add early stopping
+                callback_after_eval=stop_callback
             )
             callbacks.append(eval_callback)
             print(f"✅ Evaluation enabled (every {eval_freq} steps)")
-            print(f"✅ Early stopping enabled (patience: 50K steps, min: 100K steps)")
+            print(f"✅ Early stopping enabled (patience: 200K steps, min: 400K steps)")
         
         # Checkpoint callback
         checkpoint_callback = CheckpointCallback(
@@ -234,8 +239,14 @@ class DQNAgent:
             save_vecnormalize=False
         )
         callbacks.append(checkpoint_callback)
-        print(f"✅ Checkpointing enabled (every {checkpoint_freq} steps)")
-        
+        print(f"✅ Checkpointing enabled (every {checkpoint_freq} steps)")        
+        # Accessibility metrics callback
+        accessibility_callback = AccessibilityMetricsCallback(
+            check_freq=5000,  # Log every 5K steps
+            verbose=1
+        )
+        callbacks.append(accessibility_callback)
+        print(f"✅ Accessibility tracking enabled (curriculum constraint monitoring)")        
         # Training info
         print("\n" + "=" * 70)
         print("STARTING DQN TRAINING")

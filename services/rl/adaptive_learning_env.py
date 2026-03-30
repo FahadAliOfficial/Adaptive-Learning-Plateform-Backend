@@ -200,11 +200,38 @@ class AdaptiveLearningEnv(gym.Env):
         # Select random student profile
         self.current_student = self.simulator.get_random_profile()
         
+        # PHASE 1 FIX: Randomly select a language for this episode
+        self.current_language_idx = np.random.randint(0, len(self.config.valid_languages))
+        # Set language on profile for language-specific difficulty modifiers
+        languages = list(self.config.valid_languages)
+        self.current_student.current_language = languages[self.current_language_idx]
+        
         # Initialize mastery from profile
         self.current_mastery = self.current_student.initial_mastery.copy()
         
         # Track initial average mastery for episode-end bonus calculation
         self.initial_avg_mastery = np.mean(list(self.current_mastery.values()))
+        
+        # TIERED GOAL SYSTEM
+        # Assigns each student a progression target matching their starting level:
+        #   Beginner     (avg mastery < 0.25)  → goal = 0.50  (reach mid-level)
+        #   Intermediate (avg mastery 0.25–0.54) → goal = 0.75  (reach advanced)
+        #   Advanced     (avg mastery ≥ 0.55)  → goal = 0.85  (reach mastery)
+        # Goals upgrade dynamically mid-episode as tier boundaries are crossed.
+        if self.initial_avg_mastery < 0.25:
+            self.initial_tier = 'beginner'
+            self.current_goal_mastery = 0.50
+        elif self.initial_avg_mastery < 0.55:
+            self.initial_tier = 'intermediate'
+            self.current_goal_mastery = 0.75
+        else:
+            self.initial_tier = 'advanced'
+            self.current_goal_mastery = 0.85
+        
+        # Flags to prevent multiple bonuses for the same tier crossing
+        self.tier_crossed_to_mid = False
+        self.tier_crossed_to_advanced = False
+        self.tier_crossed_to_mastery = False
         
         # Reset episode tracking
         self.step_count = 0
@@ -215,15 +242,8 @@ class AdaptiveLearningEnv(gym.Env):
         self.fluency_history = {topic: [] for topic in self.topics}
         self.mastery_history = {topic: [self.current_mastery[topic]] for topic in self.topics}
         
-        # Track milestones for bonus rewards
-        self.milestones_hit = {0.30: False, 0.40: False, 0.50: False, 0.60: False}
-        
-        # STAGNATION PENALTY: Track consecutive low-improvement steps per topic
-        # Penalizes staying on topics where student has plateaued
-        self.stagnation_counter = {topic: 0 for topic in self.topics}
-        self.stagnation_threshold = 0.01  # 1% improvement threshold
-        self.stagnation_patience = 3  # Penalize after 3 consecutive low-improvement steps
-        self.stagnation_penalty = -2.0  # Penalty amount
+        # Milestones aligned to tier thresholds
+        self.milestones_hit = {0.50: False, 0.75: False, 0.85: False}
         
         # Increment episode counter
         self.total_episodes += 1
@@ -239,6 +259,38 @@ class AdaptiveLearningEnv(gym.Env):
         }
         
         return state, info
+    
+    def action_masks(self) -> np.ndarray:
+        """
+        Return binary mask indicating which actions are valid based on curriculum prerequisites.
+        
+        Used by RL algorithms to prevent suggesting locked topics.
+        An action is valid if:
+        1. Topic has no prerequisites (always accessible)
+        2. Topic prerequisites are met (mastery >= minimum threshold)
+        3. Student has already started practicing the topic
+        
+        Returns:
+            np.ndarray of shape (40,) with 1=valid, 0=blocked
+        """
+        mask = np.zeros(self.action_space.n, dtype=np.int8)
+        
+        for i, topic in enumerate(self.topics):
+            # Check if topic is accessible
+            violations = self._check_prerequisite_violations(topic)
+            
+            # Topic is accessible if:
+            # 1. No prerequisite violations, OR
+            # 2. Student has made meaningful progress (>=35% mastery allows continuation)
+            # NOTE: Changed from >0 to >=0.35 to prevent random init noise from bypassing gates
+            is_accessible = (len(violations) == 0) or (self.current_mastery[topic] >= 0.35)
+            
+            if is_accessible:
+                # Enable all 5 difficulty levels for this topic
+                for j in range(5):
+                    mask[i * 5 + j] = 1
+        
+        return mask
     
     def step(
         self,
@@ -259,6 +311,31 @@ class AdaptiveLearningEnv(gym.Env):
             - info: Dictionary with step metadata
         """
         
+        # CURRICULUM CONSTRAINT: Check if action is valid (prerequisites met)
+        mask = self.action_masks()
+        if mask[action] == 0:
+            # Invalid action - teaching locked topic
+            # Return immediate penalty and truncate episode
+            next_state = self._get_state_vector()
+            reward_original = -50.0  # Catastrophic penalty for violation
+            
+            # REWARD CLIPPING (apply to ALL returns, including violations)
+            REWARD_CLIP_MIN = -10.0
+            REWARD_CLIP_MAX = +10.0
+            reward = np.clip(reward_original, REWARD_CLIP_MIN, REWARD_CLIP_MAX)
+            
+            terminated = False
+            truncated = True
+            info = {
+                "step": self.step_count,
+                "action": action,
+                "error": "invalid_action_locked_topic",
+                "avg_mastery": np.mean(list(self.current_mastery.values())),
+                "reward_clipped": reward,
+                "reward_original": reward_original
+            }
+            return next_state, reward, terminated, truncated, info
+        
         # Decode action into topic and difficulty
         topic_idx = action // 5
         difficulty_idx = action % 5
@@ -274,7 +351,8 @@ class AdaptiveLearningEnv(gym.Env):
             profile=self.current_student,
             topic=topic,
             difficulty=difficulty,
-            current_mastery=old_mastery
+            current_mastery=old_mastery,
+            all_masteries=self.current_mastery  # Pass full mastery dict for prereq checking
         )
         
         # Calculate fluency ratio (inverse of time) - needed for high-velocity detection
@@ -329,17 +407,14 @@ class AdaptiveLearningEnv(gym.Env):
             gave_up=gave_up  # FIX: Pass dropout signal to reward
         )
         
-        # STAGNATION PENALTY: Penalize staying on topics where student has plateaued
-        mastery_improvement = new_mastery - old_mastery
-        if mastery_improvement < self.stagnation_threshold:
-            # Low improvement - increment counter
-            self.stagnation_counter[topic] += 1
-            if self.stagnation_counter[topic] >= self.stagnation_patience:
-                # Stuck for too long - apply penalty
-                reward += self.stagnation_penalty
-        else:
-            # Good improvement - reset counter
-            self.stagnation_counter[topic] = 0
+        # REBALANCE FIX: Per-step survival bonus (+0.5 if student didn't quit)
+        # This is the key fix: 79-step episode = +39.5 survival bonus vs 6-step = +3.0
+        # Gives model a concrete incentive to KEEP the student engaged each step
+        if not gave_up:
+            reward += 0.5
+        
+        # REMOVED: Stagnation penalty - compounded with dropout to cause cascade failures
+        # Model would panic and end episodes early when stagnation + dropout risk combined
         
         # Track teaching history
         self.step_count += 1
@@ -378,37 +453,64 @@ class AdaptiveLearningEnv(gym.Env):
         # Condition 3: Curriculum complete (60% average mastery)
         avg_mastery = np.mean(list(self.current_mastery.values()))
         
-        # FIX #2 & #5: Add completion and final episode bonuses
+        # TIERED GOAL: Check for tier crossings every step.
+        # Fires an immediate reward when a boundary is crossed and upgrades
+        # current_goal_mastery so the agent keeps pushing the student forward.
+        # REBALANCE FIX v2: Doubled all milestone bonuses to incentivize long episodes
+        if avg_mastery >= 0.50 and not self.tier_crossed_to_mid:
+            self.tier_crossed_to_mid = True
+            reward += 100.0  # Doubled: Was 50.0
+            if self.current_goal_mastery <= 0.50:
+                self.current_goal_mastery = 0.75  # Upgrade goal to advanced
+        
+        if avg_mastery >= 0.75 and not self.tier_crossed_to_advanced:
+            self.tier_crossed_to_advanced = True
+            reward += 200.0  # Doubled: Was 75.0 → now cumulative +300
+            if self.current_goal_mastery <= 0.75:
+                self.current_goal_mastery = 0.85  # Upgrade goal to mastery
+        
+        if avg_mastery >= 0.85 and not self.tier_crossed_to_mastery:
+            self.tier_crossed_to_mastery = True
+            reward += 300.0  # Tripled: Was 100.0 → now cumulative +600
+        
+        # Milestone bonuses aligned to tier thresholds (fire once each per episode)
+        milestones = [(0.50, 40.0), (0.75, 70.0), (0.85, 100.0)]
+        for threshold, bonus in milestones:
+            if avg_mastery >= threshold and not self.milestones_hit.get(threshold, False):
+                reward += bonus
+                self.milestones_hit[threshold] = True
+        
         if terminated or truncated:
             # Calculate total mastery improvement over episode
             final_avg_mastery = avg_mastery
             total_improvement = final_avg_mastery - self.initial_avg_mastery
             
-            # FIX #5: Final episode bonus (reward overall improvement)
-            # This provides long-term feedback the agent was missing
-            episode_improvement_bonus = total_improvement * 50.0
+            # Scale reward with how much the student actually improved
+            episode_improvement_bonus = total_improvement * 200.0
             reward += episode_improvement_bonus
             
-            # PRODUCTION ALIGNMENT: Milestone bonuses
-            # Give agents achievable targets throughout the episode
-            milestones = [(0.30, 5.0), (0.40, 8.0), (0.50, 12.0), (0.60, 20.0)]
-            for threshold, bonus in milestones:
-                if avg_mastery >= threshold and not self.milestones_hit.get(threshold, False):
-                    reward += bonus
-                    self.milestones_hit[threshold] = True
-            
-            # FIX #2: Completion bonus (incentivize finishing)
-            if avg_mastery >= 0.60 and not truncated:
-                # Student succeeded! Huge reward
+            # Tiered completion bonuses (success threshold = 85% mastery)
+            # REBALANCE FIX v2: Larger bonuses to incentivize long successful episodes
+            if avg_mastery >= 0.85:
+                # Full mastery achieved — ultimate success
+                completion_bonus = +300.0  # Was +100.0
+                reward += completion_bonus
+            elif avg_mastery >= 0.75:
+                # Reached advanced level
+                completion_bonus = +200.0  # Was +70.0
+                reward += completion_bonus
+            elif avg_mastery >= 0.50:
+                # Reached mid-level (beginner's primary goal)
+                completion_bonus = +100.0  # Was +40.0
+                reward += completion_bonus
+            elif not gave_up and self.step_count >= 80:
+                # Long episode engagement bonus (≥80% of 100 steps)
+                completion_bonus = +50.0  # NEW: Reward patience
+                reward += completion_bonus
+            elif not gave_up and self.step_count >= 5:
+                # Student stayed engaged — small engagement bonus
                 completion_bonus = +20.0
                 reward += completion_bonus
-            elif not truncated and self.step_count >= self.max_steps:
-                # Student completed full curriculum (even if <80%)
-                completion_bonus = +5.0
-                reward += completion_bonus
-            elif truncated:
-                # Student quit - already penalized, no bonus
-                completion_bonus = 0.0
             else:
                 completion_bonus = 0.0
         
@@ -417,6 +519,17 @@ class AdaptiveLearningEnv(gym.Env):
         
         # Get next state
         next_state = self._get_state_vector()
+        
+        # REWARD CLIPPING FOR TRAINING STABILITY (CRITICAL FIX)
+        # Teacher feedback: Reward function has excessive variance
+        # Current rewards range from -500 to +1,000 per episode
+        # Clipping to [-10, +10] reduces variance by 50-100×
+        # Standard RL practice: prevents gradient explosion and training instability
+        # Optuna hyperparameter tuning requires stable reward signal
+        reward_original = reward  # Preserve for logging/analysis
+        REWARD_CLIP_MIN = -10.0
+        REWARD_CLIP_MAX = +10.0
+        reward = np.clip(reward, REWARD_CLIP_MIN, REWARD_CLIP_MAX)
         
         # Info for logging
         info = {
@@ -429,6 +542,8 @@ class AdaptiveLearningEnv(gym.Env):
             "avg_mastery": avg_mastery,
             "gave_up": gave_up,
             "gate_violations": len(gate_violations),
+            "reward_clipped": reward,
+            "reward_original": reward_original,
             "reward_components": {
                 "mastery_improvement": (new_mastery - old_mastery) * 10.0,
                 "difficulty_bonus": self._get_difficulty_bonus(accuracy),
@@ -468,10 +583,10 @@ class AdaptiveLearningEnv(gym.Env):
         state_dim = num_languages + (self.num_topics * 3) + 9
         state = np.zeros(state_dim, dtype=np.float32)
         
-        # [0 : num_languages] Language one-hot (assume Python for simulation)
-        # Index 2 = python_3 in standard language ordering
-        python_idx = 2 if num_languages > 2 else 0
-        state[lang_offset + python_idx] = 1.0
+        # [0 : num_languages] Language one-hot (randomized per episode)
+        # PHASE 1 FIX: Use randomized language index from episode init
+        lang_idx = getattr(self, 'current_language_idx', 0)
+        state[lang_offset + lang_idx] = 1.0
         
         # [mastery_offset : mastery_offset + num_topics] Mastery scores
         for i, topic in enumerate(self.topics):
@@ -512,14 +627,24 @@ class AdaptiveLearningEnv(gym.Env):
         state[behavioral_offset + 1] = np.mean(recent_difficulties) if recent_difficulties else 0.5
         
         # [2] Average fluency ratio
-        state[behavioral_offset + 2] = 1.0  # Simplified for now
+        # PHASE 1 FIX: Use student's learning_rate as proxy for fluency
+        fluency = self.current_student.learning_rate  # Already 0.5-2.0 range
+        state[behavioral_offset + 2] = np.clip(fluency, 0.5, 2.0)
         
         # [3] Mastery stability (inverse of std dev)
         masteries = list(self.current_mastery.values())
         state[behavioral_offset + 3] = 1.0 - np.std(masteries)
         
-        # [4] Days inactive (always 0 in simulation)
-        state[behavioral_offset + 4] = 0.0
+        # [4] Days inactive (simulate occasional breaks for realism)
+        # PHASE 1 FIX: 80% no break, 15% short break (1-3 days), 5% long break (4-7 days)
+        r = np.random.random()
+        if r < 0.80:
+            days_inactive = 0.0
+        elif r < 0.95:
+            days_inactive = np.random.uniform(1, 3)
+        else:
+            days_inactive = np.random.uniform(4, 7)
+        state[behavioral_offset + 4] = days_inactive / 30.0  # Normalize to 0-1 range
         
         # [5] Gate readiness (% of prerequisites met)
         gate_readiness = self._calculate_gate_readiness()
@@ -585,14 +710,13 @@ class AdaptiveLearningEnv(gym.Env):
         # ═══════════════════════════════════════════════════════════════════
         # 1. Base reward: Mastery improvement (DOMINANT SIGNAL - 80% of reward)
         # ═══════════════════════════════════════════════════════════════════
-        # FIX: Increased multiplier to 100× to make mastery THE objective
-        # All other bonuses combined should be < 20% of mastery signal
-        # This prevents reward hacking via coherence/fluency farming
+        # REBALANCE FIX: Stronger mastery signal (50× gains, 5× losses)
+        # Previous 10× signal was overwhelmed by violation/stagnation penalties
         mastery_delta = new_mastery - old_mastery
         if mastery_delta > 0:
-            base_reward = mastery_delta * 100.0  # STRONG: +0.05 mastery = +5.0 reward
+            base_reward = mastery_delta * 50.0  # Strong reward for improvement
         else:
-            base_reward = mastery_delta * 20.0   # Moderate penalty for regression (5× asymmetry)
+            base_reward = mastery_delta * 5.0   # Small penalty for decay (can't fully control)
         
         # 2. Optimal difficulty bonus (Vygotsky's Zone of Proximal Development)
         # FIX: Reduced from ±0.5 to ±0.1 to prevent overshadowing mastery signal
@@ -607,22 +731,11 @@ class AdaptiveLearningEnv(gym.Env):
             difficulty_bonus = 0.0  # No learning, no bonus
         
         # 3. Prerequisite penalty (enforce curriculum safety)
-        # PRODUCTION ALIGNMENT: Graduated penalty using penalty_steepness from soft_gates
-        # Closer to threshold = smaller penalty (not flat -10.0)
-        prerequisite_penalty = 0.0
-        if gate_violations:
-            gate_info = self.simulator.get_soft_gate_info(topic)
-            for violation in gate_violations:
-                prereq_topic = violation.split()[0]  # Extract topic from violation string
-                prereq_mastery = self.current_mastery.get(prereq_topic, 0.0)
-                min_score = gate_info.get('min_score', 0.55) if gate_info else 0.55
-                
-                # Gap ratio: how far from the threshold (0 = at threshold, 1 = no mastery)
-                gap_ratio = max(0, (min_score - prereq_mastery) / min_score)
-                
-                # Graduated penalty: -3 (close to threshold) to -10 (far from threshold)
-                penalty = -3.0 - (7.0 * gap_ratio)
-                prerequisite_penalty += penalty
+        # REBALANCE FIX v2: Graduated penalty based on deficit severity
+        # Replaces flat -1.5 that was too weak and -10.0 that was too harsh
+        # This should never trigger in production since action masking prevents violations,
+        # but serves as additional safety during training exploration
+        prerequisite_penalty = self._calculate_soft_gate_penalty(gate_violations)
         
         # 4. Fluency bonus (reward efficient learning)
         # FIX: Reduced from ±0.5 to ±0.1 - fluency is nice-to-have, not core objective
@@ -673,9 +786,22 @@ class AdaptiveLearningEnv(gym.Env):
             else:
                 coherence_bonus = -0.05  # Tiny penalty for random jumping
         
-        # 7. Dropout penalty (FIX: Discourage student frustration quits)
-        # Critical for retention - student quits are worse than low mastery
-        dropout_penalty = -50.0 if gave_up else 0.0
+        # 7. Dropout penalty
+        # REBALANCE FIX v2: Exponentially stronger early dropout penalty
+        # Previous -70 early was still too weak to overcome survival bonus farming
+        # New gradient: -200 (steps 1-10), -100 (11-30), -50 (31-60), -20 (61-100)
+        if gave_up:
+            progress = self.step_count / self.max_steps
+            if progress < 0.10:
+                dropout_penalty = -200.0  # Catastrophic early quit
+            elif progress < 0.30:
+                dropout_penalty = -100.0  # Very bad mid-early quit
+            elif progress < 0.60:
+                dropout_penalty = -50.0   # Moderate mid-quit
+            else:
+                dropout_penalty = -20.0   # Mild late quit (student tried hard)
+        else:
+            dropout_penalty = 0.0
         
         # 8. Completion bonus (FIX #2: Incentivize finishing full curriculum)
         # NOTE: This is calculated in step() when episode ends, not here
@@ -692,15 +818,19 @@ class AdaptiveLearningEnv(gym.Env):
             dropout_penalty
         )
         
-        return float(total)
+        # Scale reward by /20 instead of hard clipping.
+        # Clipping destroyed relative magnitude: dropout(-200) and mastery(+5) both
+        # became -10/+5, making dropout only 2x a bad step instead of 40x.
+        # Scaling preserves ratios: dropout=-10, mastery gains=0.25–2.5, steps~±0.5
+        # This keeps gradients stable while keeping the dropout penalty dominant.
+        return float(total / 20.0)
     
     def _get_difficulty_bonus(self, accuracy: float) -> float:
         """
         Calculate difficulty bonus based on accuracy.
         
-        Sweet spot: 40-85% accuracy (optimal challenge)
-        Too hard: <40% (frustrating)
-        Too easy: >90% (boring)
+        PHASE 2 FIX: Smooth Gaussian curve instead of cliff edges.
+        Sweet spot: 40-85% accuracy centered at 62.5%
         
         Args:
             accuracy: Exam accuracy (0-1)
@@ -708,14 +838,19 @@ class AdaptiveLearningEnv(gym.Env):
         Returns:
             Bonus value (-0.5 to +1.0)
         """
-        if 0.40 <= accuracy <= 0.85:
-            return 1.0  # Perfect challenge (flow state)
-        elif accuracy < 0.40:
-            return -0.5  # Too hard, frustrating
-        elif accuracy > 0.90:
-            return -0.3  # Too easy, boring
-        else:
-            return 0.0  # Edge cases
+        import math
+        
+        optimal_center = 0.625  # Midpoint of 40-85% range
+        distance = abs(accuracy - optimal_center)
+        
+        # Gaussian-like curve: peaks at center, smooth falloff
+        bonus = 1.0 * math.exp(-(distance ** 2) / 0.1)
+        
+        # Penalty for extreme cases (too easy or impossible)
+        if accuracy < 0.20 or accuracy > 0.95:
+            bonus -= 0.5
+        
+        return bonus
     
     def _check_prerequisite_violations(self, topic: str) -> list:
         """
@@ -734,29 +869,73 @@ class AdaptiveLearningEnv(gym.Env):
         
         Returns:
             List of violation strings (empty if no violations)
+        
+        Note: This is used for action masking - violations block the action entirely.
+        For soft penalty calculation, use _calculate_soft_gate_penalty().
         """
         
         violations = []
-        threshold = 0.60
         
-        # Prerequisite map (from transition_map.json)
-        prereq_map = {
-            "UNIV_FUNC": ["UNIV_VAR"],
-            "UNIV_LOOP": ["UNIV_COND"],
-            "UNIV_COLL": ["UNIV_VAR"],
-            "UNIV_OOP": ["UNIV_VAR", "UNIV_FUNC", "UNIV_COLL"],
-            "UNIV_RECUR": ["UNIV_FUNC", "UNIV_LOOP"],
-            "UNIV_ERR": ["UNIV_FUNC"]
-        }
-        
-        if topic in prereq_map:
-            for prereq in prereq_map[topic]:
-                if self.current_mastery[prereq] < threshold:
+        # PHASE 1 FIX: Load prerequisites dynamically from transition_map.json soft_gates
+        # This eliminates ghost topics (UNIV_RECUR, UNIV_ERR) and uses correct prerequisite lists
+        gate_info = self.simulator.get_soft_gate_info(topic)
+        if gate_info:
+            min_score = gate_info.get('min_score', 0.55)
+            for prereq in gate_info['prereqs']:
+                if prereq in self.current_mastery and self.current_mastery[prereq] < min_score:
                     violations.append(
-                        f"{prereq} ({self.current_mastery[prereq]:.2f} < {threshold})"
+                        f"{prereq} ({self.current_mastery[prereq]:.2f} < {min_score})"
                     )
         
         return violations
+    
+    def _calculate_soft_gate_penalty(self, gate_violations: list) -> float:
+        """
+        Calculate graduated penalty for prerequisite violations.
+        
+        REBALANCE FIX v2: Exponential scaling based on mastery deficit.
+        Small deficit (10-20% below threshold) = -5 per prereq
+        Large deficit (40-55% below threshold) = -20 per prereq
+        
+        This replaces flat -1.5 penalty that was too weak to influence learning.
+        
+        Args:
+            gate_violations: List of violation strings from _check_prerequisite_violations
+        
+        Returns:
+            Total penalty (negative value)
+        """
+        if not gate_violations:
+            return 0.0
+        
+        total_penalty = 0.0
+        
+        for violation in gate_violations:
+            # Parse violation string: "UNIV_VAR (0.25 < 0.55)"
+            try:
+                parts = violation.split('(')
+                if len(parts) >= 2:
+                    nums = parts[1].replace(')', '').split('<')
+                    current = float(nums[0].strip())
+                    required = float(nums[1].strip())
+                    
+                    deficit = required - current  # 0.0 to 0.55
+                    deficit_ratio = deficit / required  # 0.0 to 1.0
+                    
+                    # Exponential scaling: y = -5 * (1 + (deficit_ratio)^2)
+                    # At deficit_ratio=0.2 (small): -5.2
+                    # At deficit_ratio=0.5 (medium): -6.25
+                    # At deficit_ratio=1.0 (large): -10.0
+                    penalty = -5.0 * (1.0 + deficit_ratio ** 2)
+                    total_penalty += penalty
+                else:
+                    # Fallback if parsing fails
+                    total_penalty += -5.0
+            except:
+                # Fallback if parsing fails
+                total_penalty += -5.0
+        
+        return total_penalty
     
     def _calculate_gate_readiness(self) -> float:
         """

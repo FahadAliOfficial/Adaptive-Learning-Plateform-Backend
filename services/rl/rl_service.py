@@ -142,6 +142,7 @@ class RLModelService:
         
         # Decode action to (mapping_id, difficulty)
         mapping_id, difficulty = self.env.decode_action(action_int)
+        difficulty = max(difficulty, 0.3)  # Clamp: frontend slider min=0.3 (Easy)
         
         # Check prerequisites
         violations = self._check_prerequisites(mapping_id, mastery_dict)
@@ -227,6 +228,7 @@ class RLModelService:
         
         # Decode action
         mapping_id, difficulty = self.env.decode_action(majority_action)
+        difficulty = max(difficulty, 0.3)  # Clamp: frontend slider min=0.3 (Easy)
         
         # Check prerequisites
         violations = self._check_prerequisites(mapping_id, mastery_dict)
@@ -306,6 +308,7 @@ class RLModelService:
                 # Snap to nearest tier
                 tiers = np.array([0.2, 0.4, 0.6, 0.8, 1.0])
                 difficulty = float(tiers[np.argmin(np.abs(tiers - target_difficulty))])
+                difficulty = max(difficulty, 0.3)  # Clamp: frontend slider min=0.3 (Easy)
                 
                 return {
                     'mapping_id': mapping_id,
