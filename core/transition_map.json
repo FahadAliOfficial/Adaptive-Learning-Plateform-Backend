@@ -387,17 +387,49 @@
   ],
   "soft_gates": [
     {
-      "gate_id": "GATE_OOP_MASTERY",
-      "mapping_id": "UNIV_OOP",
+      "gate_id": "GATE_SYN_PREC_MASTERY",
+      "mapping_id": "UNIV_SYN_PREC",
       "prerequisite_mappings": [
-        "UNIV_VAR",
-        "UNIV_FUNC",
-        "UNIV_COLL"
+        "UNIV_SYN_LOGIC"
       ],
-      "ideal_mastery_score": 0.80,
-      "minimum_allowable_score": 0.60,
-      "penalty_steepness": 2.5,
-      "description": "OOP is a critical milestone requiring strong foundations in variables, functions, and collections"
+      "ideal_mastery_score": 0.50,
+      "minimum_allowable_score": 0.40,
+      "penalty_steepness": 1.5,
+      "description": "Syntax precision requires understanding basic program logic and execution flow"
+    },
+    {
+      "gate_id": "GATE_VAR_MASTERY",
+      "mapping_id": "UNIV_VAR",
+      "prerequisite_mappings": [
+        "UNIV_SYN_LOGIC",
+        "UNIV_SYN_PREC"
+      ],
+      "ideal_mastery_score": 0.55,
+      "minimum_allowable_score": 0.45,
+      "penalty_steepness": 1.8,
+      "description": "Variables require solid grasp of syntax and program structure"
+    },
+    {
+      "gate_id": "GATE_COND_MASTERY",
+      "mapping_id": "UNIV_COND",
+      "prerequisite_mappings": [
+        "UNIV_VAR"
+      ],
+      "ideal_mastery_score": 0.60,
+      "minimum_allowable_score": 0.50,
+      "penalty_steepness": 1.8,
+      "description": "Conditionals require understanding variables and data types"
+    },
+    {
+      "gate_id": "GATE_LOOP_MASTERY",
+      "mapping_id": "UNIV_LOOP",
+      "prerequisite_mappings": [
+        "UNIV_COND"
+      ],
+      "ideal_mastery_score": 0.60,
+      "minimum_allowable_score": 0.50,
+      "penalty_steepness": 2.0,
+      "description": "Loops build on conditional logic and require strong control flow understanding"
     },
     {
       "gate_id": "GATE_FUNC_MASTERY",
@@ -423,6 +455,19 @@
       "minimum_allowable_score": 0.58,
       "penalty_steepness": 2.2,
       "description": "Collections require strong grasp of types and iteration patterns"
+    },
+    {
+      "gate_id": "GATE_OOP_MASTERY",
+      "mapping_id": "UNIV_OOP",
+      "prerequisite_mappings": [
+        "UNIV_VAR",
+        "UNIV_FUNC",
+        "UNIV_COLL"
+      ],
+      "ideal_mastery_score": 0.80,
+      "minimum_allowable_score": 0.60,
+      "penalty_steepness": 2.5,
+      "description": "OOP is a critical milestone requiring strong foundations in variables, functions, and collections"
     }
   ],
   "language_specific_modifiers": [
