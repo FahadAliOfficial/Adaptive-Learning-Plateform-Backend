@@ -935,3 +935,10 @@ curl -X POST http://localhost:8000/api/exam/submit \
 **Phase 1 Status:** ✅ Production-ready (with security patches)  
 **Phase 2 ETA:** RL model integration + remaining 34% of features  
 **Final Goal:** AI-powered programming tutor that adapts in real-time
+
+## Licence
+
+MIT License
+
+Copyright (c) 2026 Fahad Ali
+
